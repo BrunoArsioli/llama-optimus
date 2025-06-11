@@ -10,3 +10,29 @@ Lightweight Python tool using Optuna for tuning llama.cpp flags: towards optimal
 * Supports Apple Silicon, Linux, (next: NVIDIA platforms)
 
   
+## Requirements
+
+- Python 3.10 or higher
+- llama.cpp (`llama-bench` or `llama-cli`) — see [llama.cpp repo](https://github.com/ggerganov/llama.cpp) for installation
+
+## Installation
+
+1. Install Python dependencies:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+2. Install llama.cpp:
+
+    See [llama.cpp repository](https://github.com/ggerganov/llama.cpp) for full build instructions.
+
+    Example (Linux/Mac):
+
+    ```bash
+    git clone https://github.com/ggerganov/llama.cpp.git
+    cd llama.cpp
+    make
+    ```
+
+    Make sure the built CLI (`llama-bench`, `llama-cli`, etc.) is accessible in your PATH.
