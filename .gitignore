@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# local paths
+my_local_paths.sh
+
 # C extensions
 *.so
 

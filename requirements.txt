@@ -1,1 +1,2 @@
 optuna>=3.0
+pandas

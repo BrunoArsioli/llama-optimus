@@ -39,23 +39,28 @@ Lightweight Python tool using Optuna for tuning llama.cpp flags: towards optimal
 
     You should either add the llama.cpp/build/bin path to your shell’s $PATH, or edit your benchmark.py script to use the full path to llama-bench.
 
-    2.1. Create a path to your llama.cpp/build/bin and add to your shell's path:
+3. Find the path to your llama.cpp/build/bin folder:
 
-        Go to your llama.cpp folder; After you build, go to llama.cpp/build/bin 
-        Use 'pwd' to print you path to build/bin folder, which should be something with the form
-        my_path/llama.cpp/build/bin. Copy this entire path.
+    Go to your llama.cpp folder; After you build, go to llama.cpp/build/bin 
+    Use 'pwd' to print you path to build/bin folder, which should be something with the form
+    my_path/llama.cpp/build/bin. Copy this entire path.
 
-        For Zsh (~/.zshrc):
-            ````
-            echo 'export LLAMA_BENCH_PATH="my_path/llama.cpp/build/bin/llama-bench:$LLAMA_BENCH_PATH" ' >> ~/.zshrc 
-            source ~/.zshrc
-            ```         
+    Do the same and find the path to your AI models (i.e. gemma3xxxx.ggfu file)
 
-        Or, use the full path in your benchmar.py script:
-            Just replace "llama_bench_path" in your code with the actual path, e.g.:
-            ```
-            llama_bench_path = "my_path/llama.cpp/build/bin/llama-bench"
-            ```
+4. Edit the 'set_local_paths.sh' script 
 
+    You need to update this script, providing the paths to both llama.cpp/build/bin 
+    and to your model.ggfu file. 
 
+    (Note: If you have a big model, split in two or more files, e.g. Llama-4-Scout-17B-16E-Instruct-UD-Q5_K_XL-00001-of-00002.gguf and Llama-4-Scout-17B-16E-Instruct-UD-Q5_K_XL-00002-of-00002.gguf, 
+    you just need to provide a path pointing to 
+    the first file: Llama-4-Scout-17B-16E-Instruct-UD-Q5_K_XL-00001-of-00002.gguf. 
+    llama-bench will handle it for you)
+
+5. Run
+    ```bash
+    source set_local_paths.sh
+    python src/benchmark.sh
+    ``` 
+ 
 
