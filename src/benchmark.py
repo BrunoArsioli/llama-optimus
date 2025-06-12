@@ -99,7 +99,7 @@ def objective(trial):
         return 0.0
 
 
-def run_optimization(n_trials=3):
+def run_optimization(n_trials=35):
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=n_trials)
     print("Best config:", study.best_trial.params)
