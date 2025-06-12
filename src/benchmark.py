@@ -11,28 +11,6 @@ import argparse
 # count number of available cpus
 max_threads = os.cpu_count()
 
-# path to llama-bench (usualy in llama.cpp/tools)
-#llama_bench_path = shutil.which("llama-bench")
-llama_bin_path = os.environ.get("LLAMA_BIN")
-llama_bench_path = f"{llama_bin_path}/llama-bench"
-
-# define path to your model
-model_path = os.environ.get("MODEL_PATH")
-
-if llama_bin_path is None or model_path is None:
-    raise ValueError("LLAMA_BIN or MODEL_PATH not set. Did you source set_local_paths.sh?")
-
-if llama_bench_path is None:
-    raise FileNotFoundError("llama-bench not found in PATH. " \
-    "Please, install llama.cpp and make sure to set your local LLAMA_BIN variable. "
-    "(i.e. edit approprietely and run the script named 'set_local_paths.sh')" \
-    "alternative: comment the 'llama_bench_path = xxxxx' line and " \
-    "add a line 'llama_bench_path = \"PATH_TO_LLAMA-BENCH\" ' to define the path to llama-bench.") 
-
-print(f"Number of CPUs: {max_threads}.")
-print(f"Path to 'llama-bench':{llama_bench_path}")  # in llama.cpp/tools/
-print(f"Path to 'model.gguf' file:{model_path}")
-
 # You can later move these to search_space.py if desired
 SEARCH_SPACE = {
     #'m_map': [0,1],          # Enable memory mapping when models are loaded (defaut:0)
@@ -50,13 +28,6 @@ def estimate_max_ngl(min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high']):
     print("Started running estimate for the maximum number of model layer (-ngl) " \
     "that can be passed to you RAM memory")
 
-    # avoid using max_threads in test
-    if max_threads > 1:
-        max_threads_test = int(max_threads/2)
-    else:
-        max_threads_test = max_threads 
-    print(f"Max_threads in test: {max_threads_test}")
-
     while low < high:
         mid = (low + high + 1) // 2
         print(f"Testing for: -ngl = {mid}")
@@ -64,7 +35,7 @@ def estimate_max_ngl(min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high']):
         cmd = [
             llama_bench_path,
             "--model", model_path,
-            "-t",  str(max_threads_test),
+            "-t",  str(max_threads),
             "-n", "1",     # minimal token-generation
             "-r", "1",
             "-ngl", str(mid),
@@ -147,6 +118,33 @@ def run_optimization(n_trials=35):
     print("Best tokens/sec:", study.best_value)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="llama-optimus: Benchmark & tune llama.cpp.")
+    parser.add_argument("--trials", type=int, default=35, help="Number of Optuna trials: n searches in parameter space")
+    parser.add_argument("--model", type=str, help="Path to model (overrides env var)")
+    parser.add_argument("--llama-bin", type=str, help="Path to llama.cpp build/bin folder (overrides env var)")
+    args = parser.parse_args()
+
+    # Set paths based on CLI flags or env vars
+    llama_bin_path = args.llama_bin if args.llama_bin else os.environ.get("LLAMA_BIN")
+    llama_bench_path = f"{llama_bin_path}/llama-bench"
+    model_path = args.model if args.model else os.environ.get("MODEL_PATH")
+
+    if llama_bin_path is None or model_path is None:
+        raise ValueError("LLAMA_BIN or MODEL_PATH not set. Set via environment variable or pass via CLI flags.")
+
+    if not os.path.isfile(llama_bench_path):
+        raise FileNotFoundError(f"llama-bench not found at {llama_bench_path}." \
+        "Please, install llama.cpp and make sure to set your local LLAMA_BIN variable. "
+        "(i.e. edit approprietely and run the script named 'set_local_paths.sh')" \
+        "alternative: comment the 'llama_bench_path = xxxxx' line and " \
+        "add a line 'llama_bench_path = \"PATH_TO_LLAMA-BENCH\" ' to define the path to llama-bench.") 
+
+    print(f"Number of CPUs: {max_threads}.")
+    print(f"Path to 'llama-bench':{llama_bench_path}")  # in llama.cpp/tools/
+    print(f"Path to 'model.gguf' file:{model_path}")
+
     # estimate maximum number of layers before run 
     SEARCH_SPACE['gpu_layers']['high'] = estimate_max_ngl()
-    run_optimization()
+    run_optimization(n_trials=args.trials)
+
+
