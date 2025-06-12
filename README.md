@@ -65,38 +65,66 @@ Lightweight Python tool using Optuna for tuning llama.cpp flags: towards optimal
  
  Results will show you the best configuration for token generation with llama.cpp.
 
- Optimus tokens/s: 
- (-t)   -->   'threads' 
- (-b)   -->   'n_batch' 
- (-ngl) -->   'gpu_layers' 
- (-mmp) -->   'm_map'
- (-ub)  -->   'ubatch-size' 
- (-fa)  -->   'flash-attn'  
+ Optimus tokens/s:  
+
+ ` (-t)   -->   'threads' `
+
+ ` (-b)   -->   'n_batch' `
+
+ ` (-ngl) -->   'gpu_layers' `
+ 
+ ` (-mmp) -->   'm_map' `
+
+ ` (-ub)  -->   'ubatch-size' `
+
+ ` (-fa)  -->   'flash-attn' `
 
 
 
 
 6. The defaut llama.cpp configuration:
-test parameters:
+
+  test parameters:
+
   -d, --n-depth                          (default: 0)
+
   -b, --batch-size                       (default: 2048)
+
   -ub, --ubatch-size                     (default: 512)
+
   -ctk, --cache-type-k                   (default: f16)
+
   -ctv, --cache-type-v                   (default: f16)
+
   -dt, --defrag-thold                    (default: -1)
+
   -t, --threads                          (default: system dependent)
+
   -C, --cpu-mask                         (default: 0x0)
+
   --cpu-strict <0|1>                     (default: 0)
+
   --poll <0...100>                       (default: 50)
+
   -ngl, --n-gpu-layers                   (default: 99)
+
   -rpc, --rpc                            (default: none)
+
   -sm, --split-mode                      (default: layer)
+
   -mg, --main-gpu                        (default: 0)
+
   -nkvo, --no-kv-offload <0|1>           (default: 0)
+
   -fa, --flash-attn <0|1>                (default: 0)
+
   -mmp, --mmap <0|1>                     (default: 1)
+
   -embd, --embeddings <0|1>              (default: 0)
+
   -ts, --tensor-split <ts0/ts1/..>       (default: 0)
+
   -ot --override-tensors <tensor name pattern>=<buffer type>;...
                                             (default: disabled)
+
   -nopo, --no-op-offload <0|1>              (default: 0)

@@ -6,6 +6,7 @@ import shutil
 import pandas as pd 
 import tempfile
 import subprocess 
+import argparse 
 
 # count number of available cpus
 max_threads = os.cpu_count()
@@ -34,13 +35,56 @@ print(f"Path to 'model.gguf' file:{model_path}")
 
 # You can later move these to search_space.py if desired
 SEARCH_SPACE = {
-    'm_map': [0,1],          # Enable memory mapping when models are loaded (defaut:0)
+    #'m_map': [0,1],          # Enable memory mapping when models are loaded (defaut:0)
     'flash_attn': [0,1],     #  --flash-attn <0|1>  ; Enables flash attention       
     'gpu_layers': {'low': 0, 'high': 99},           # (-ngl) Set max to model + VRAM; The max value must be found first
     'threads':    {'low': 1, 'high': max_threads},  # Adjust range to your hardware
     'ubatch_size'    : [16, 32, 64, 128, 256, 512, 1024, 2048, 4096], #  
     'batch_size'     : [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]  # select number from list
 }
+
+# estimate max value for number of layers; ngl 
+# llama-bench crash if ngl is too large. Depends on model and hardware
+def estimate_max_ngl(min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high']):
+    low, high = min_ngl, max_ngl
+    print("Started running estimate for the maximum number of model layer (-ngl) " \
+    "that can be passed to you RAM memory")
+
+    # avoid using max_threads in test
+    if max_threads > 1:
+        max_threads_test = int(max_threads/2)
+    else:
+        max_threads_test = max_threads 
+    print(f"Max_threads in test: {max_threads_test}")
+
+    while low < high:
+        mid = (low + high + 1) // 2
+        print(f"Testing for: -ngl = {mid}")
+
+        cmd = [
+            llama_bench_path,
+            "--model", model_path,
+            "-t",  str(max_threads_test),
+            "-n", "1",     # minimal token-generation
+            "-r", "1",
+            "-ngl", str(mid),
+            "-o", "csv"
+        ]
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, timeout=80, check=True)
+            low = mid  # success → try higher
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            high = mid - 1  # failure → reduce range
+        
+        #try:
+        #    subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=True)
+        #    low = mid  # success → try higher
+        #except subprocess.CalledProcessError:
+        #    high = mid - 1  # failure → reduce range
+    print(f"Estimated max ngl = {low}")
+    return low
+
+
 
 def run_llama_bench_with_csv(cmd):
     # cmd should include: ... "-o", "csv"
@@ -70,8 +114,6 @@ def objective(trial):
     batch = trial.suggest_categorical('batch', SEARCH_SPACE['batch_size'])
     u_batch = trial.suggest_categorical('u_batch', SEARCH_SPACE['ubatch_size'])
     gpu_layers = trial.suggest_int('gpu_layers', SEARCH_SPACE['gpu_layers']['low'], SEARCH_SPACE['gpu_layers']['high'])
-    #m_map      = trial.suggest_int('m_map', SEARCH_SPACE['m_map']['low'], SEARCH_SPACE['m_map']['high'])
-    m_map      = trial.suggest_categorical('m_map', SEARCH_SPACE['m_map'])
     flash      = trial.suggest_categorical('flash', SEARCH_SPACE['flash_attn'])
 
 
@@ -85,11 +127,10 @@ def objective(trial):
         "--flash-attn", str(flash), # enables Flash Attention, a performance optimization during inference. 
         "--model", model_path,      # <--- change this or parametrize
         "-n", "35",             # tokens to generate (larger value improve final statistics, i.e. lower std intok/s)
-        #"-p", "14",            # tokens to process (larger value improve final statistics, i.e. lower std intok/s)
-        "-mmp", str(m_map),     # 0; load entire model to RAM. 1; map memory and load what is needed 
         "-r", "2",              # number of benchmark runs for each configuration; mean value and std calculated from it 
         "-o", "csv"             # save temporary .csv file with llama-bench outputs
     ]
+    # note: memory mapping is now set by defaut. Instead, need to add --no-map flag. 
 
     try:
         tokens_per_sec = run_llama_bench_with_csv(cmd)
@@ -106,4 +147,6 @@ def run_optimization(n_trials=35):
     print("Best tokens/sec:", study.best_value)
 
 if __name__ == "__main__":
+    # estimate maximum number of layers before run 
+    SEARCH_SPACE['gpu_layers']['high'] = estimate_max_ngl()
     run_optimization()
