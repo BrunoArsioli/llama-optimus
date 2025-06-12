@@ -1,22 +1,48 @@
 import subprocess
 import re
 import optuna
+import os
+import shutil
+import pandas as pd 
+import tempfile
+
+# count number of available cpus
+max_threads = os.cpu_count()
+
+# path to llama-bench (usualy in llama.cpp/tools)
+llama_bench_path = shutil.which("llama-bench")
+
+if llama_bench_path is None:
+    raise FileNotFoundError("llama-bench not found in PATH. " \
+    "Please, install llama.cpp and make sure llama-bench is accessible. " \
+    "alternative: comment the 'llama_bench_path = shutil.which(\"llama-bench\")' line and " \
+    "add a line 'llama_bench_path = \"PATH_TO_LLAMA-BENCH\" ' to define the path to llama-bench." 
+
+
+print(f"Number of CPUs: {max_threads}.")
+print(f"Path to 'llama-bench':{llama_bench_path}")  # in llama.cpp/tools/
+print(f"Path to 'model.gguf' file:")
 
 # You can later move these to search_space.py if desired
 SEARCH_SPACE = {
-    'threads':    {'low': 1, 'high': 12},       # Adjust range to your hardware
+    'threads':    {'low': 1, 'high': max_threads},       # Adjust range to your hardware
     'n_batch':    {'low': 16, 'high': 8192, 'log': True},
-    'gpu_layers': {'low': 0, 'high': 70}        # (-ngl) Set max to model + VRAM; The max value must be found first
+    'gpu_layers': {'low': 0, 'high': 70},       # (-ngl) Set max to model + VRAM; The max value must be found first
     'm_map':      {'low': 0, 'high': 1}         # Enable memory mapping when models are loaded (defaut:0)
 }
 
 
-def extract_tokens_per_sec(output):
-    # Typical line: 'eval time = 1.02 s, tok/s = 322.1'
-    match = re.search(r"tok/s\s*=\s*([0-9.]+)", output)
-    if match:
-        return float(match.group(1))
-    raise ValueError("Could not parse tokens/sec from output:\n" + output)
+def run_llama_bench_with_csv(cmd):
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as csvfile:
+        cmd += ["-o", csvfile.name]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr)
+        df = pd.read_csv(csvfile.name)
+        tg_rows = df[df["test"] == "tg"]
+        if tg_rows.empty:
+            raise ValueError("No 'tg' (throughput) test results found in output CSV")
+        return float(tg_rows["avg_ts"].iloc[0])
 
 
 def objective(trial):
@@ -26,27 +52,26 @@ def objective(trial):
     gpu_layers = trial.suggest_int('gpu_layers', SEARCH_SPACE['gpu_layers']['low'], SEARCH_SPACE['gpu_layers']['high'])
     m_map      = trial.suggest_int('m_map', SEARCH_SPACE['m_map']['low'], SEARCH_SPACE['m_map']['high'])
 
+    # call tempfile to hold results from llama-bench 
+    csvfile = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
+
     # Build llama-bench command (edit as needed)
     cmd = [
-        "llama-bench",         # path to your llama-bench binary
+        llama_bench_path,        # path to your llama-bench binary
         "-t", str(threads),
-        "--n_batch", str(n_batch),
-        "--gpu-layers", str(gpu_layers),    # (-ngl flag)
+        "--batch-size", str(n_batch), # (-b flag)
+        "-ngl", str(gpu_layers),      # (-ngl or --n-gpu-layers flag)
         "--model", "PATH_TO_MODEL.gguf",    # <--- change this or parametrize
         "-n", "80",             # tokens to generate (larger value improve final statistics, i.e. lower std intok/s)
         "-p", "80",             # tokens to process (larger value improve final statistics, i.e. lower std intok/s)
-        "m_map", str(m_map),    # 0; load entire model to RAM. 1; map memory and load what is needed 
-        "-r", "5"               # number of benchmark runs for each configuration; mean value and std calculated from it 
+        "-mmp", str(m_map),     # 0; load entire model to RAM. 1; map memory and load what is needed 
+        "-r", "5",              # number of benchmark runs for each configuration; mean value and std calculated from it 
+        "-o", csvfile.name      # save temporary .csv file with llama-bench outputs
     ]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-        output = result.stdout + "\n" + result.stderr
-        if result.returncode != 0:
-            print(f"llama-bench failed: {output}")
-            return 0.0
-        tok_s = extract_tokens_per_sec(output)
-        return tok_s
+        tokens_per_sec = run_llama_bench_with_csv(cmd)
+        return tokens_per_sec    
     except Exception as e:
         print(f"Error: {e}")
         return 0.0
@@ -60,8 +85,3 @@ def run_optimization(n_trials=30):
 
 if __name__ == "__main__":
     run_optimization()
-
-
-
-
-
