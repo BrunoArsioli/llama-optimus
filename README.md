@@ -45,12 +45,12 @@ Lightweight Python tool using Optuna for tuning llama.cpp flags: towards optimal
     Use 'pwd' to print you path to build/bin folder, which should be something with the form
     my_path/llama.cpp/build/bin. Copy this entire path.
 
-    Do the same and find the path to your AI models (i.e. gemma3xxxx.ggfu file)
+    Do the same and find the path to your AI models (i.e. gemma3xxxx.gguf file)
 
 4. Edit the 'set_local_paths.sh' script 
 
     You need to update this script, providing the paths to both llama.cpp/build/bin 
-    and to your model.ggfu file. 
+    and to your model.gguf file. 
 
     (Note: If you have a big model, split in two or more files, e.g. Llama-4-Scout-17B-16E-Instruct-UD-Q5_K_XL-00001-of-00002.gguf and Llama-4-Scout-17B-16E-Instruct-UD-Q5_K_XL-00002-of-00002.gguf, 
     you just need to provide a path pointing to 

@@ -35,7 +35,7 @@ print(f"Path to 'model.gguf' file:{model_path}")
 # You can later move these to search_space.py if desired
 SEARCH_SPACE = {
     'threads':    {'low': 1, 'high': max_threads},       # Adjust range to your hardware
-    'n_batch':    {'low': 16, 'high': 8192, 'log': True},
+    'n_batch_options': [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192],  # select number from list
     'gpu_layers': {'low': 0, 'high': 70},       # (-ngl) Set max to model + VRAM; The max value must be found first
     'm_map':      {'low': 0, 'high': 1}         # Enable memory mapping when models are loaded (defaut:0)
 }
@@ -66,9 +66,12 @@ def run_llama_bench_with_csv(cmd):
 def objective(trial):
     # Sample params
     threads    = trial.suggest_int('threads', SEARCH_SPACE['threads']['low'], SEARCH_SPACE['threads']['high'])
-    n_batch    = trial.suggest_int('n_batch', SEARCH_SPACE['n_batch']['low'], SEARCH_SPACE['n_batch']['high'], log=SEARCH_SPACE['n_batch'].get('log', False))
+    #n_batch    = trial.suggest_int('n_batch', SEARCH_SPACE['n_batch']['low'], SEARCH_SPACE['n_batch']['high'], log=SEARCH_SPACE['n_batch'].get('log', False))
+    #n_batch_options = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
+    n_batch = trial.suggest_categorical('n_batch', SEARCH_SPACE['n_batch_options'])
     gpu_layers = trial.suggest_int('gpu_layers', SEARCH_SPACE['gpu_layers']['low'], SEARCH_SPACE['gpu_layers']['high'])
     m_map      = trial.suggest_int('m_map', SEARCH_SPACE['m_map']['low'], SEARCH_SPACE['m_map']['high'])
+
 
     # call tempfile to hold results from llama-bench 
     csvfile = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
@@ -80,8 +83,8 @@ def objective(trial):
         "--batch-size", str(n_batch), # (-b flag)
         "-ngl", str(gpu_layers),      # (-ngl or --n-gpu-layers flag)
         "--model", model_path,    # <--- change this or parametrize
-        "-n", "10",             # tokens to generate (larger value improve final statistics, i.e. lower std intok/s)
-        "-p", "10",             # tokens to process (larger value improve final statistics, i.e. lower std intok/s)
+        "-n", "14",             # tokens to generate (larger value improve final statistics, i.e. lower std intok/s)
+        "-p", "14",             # tokens to process (larger value improve final statistics, i.e. lower std intok/s)
         "-mmp", str(m_map),     # 0; load entire model to RAM. 1; map memory and load what is needed 
         "-r", "3",              # number of benchmark runs for each configuration; mean value and std calculated from it 
         "-o", "csv"             # save temporary .csv file with llama-bench outputs
@@ -95,7 +98,7 @@ def objective(trial):
         return 0.0
 
 
-def run_optimization(n_trials=7):
+def run_optimization(n_trials=12):
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=n_trials)
     print("Best config:", study.best_trial.params)
