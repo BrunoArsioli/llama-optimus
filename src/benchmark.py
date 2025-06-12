@@ -10,7 +10,9 @@ import tempfile
 max_threads = os.cpu_count()
 
 # path to llama-bench (usualy in llama.cpp/tools)
-llama_bench_path = shutil.which("llama-bench")
+#llama_bench_path = shutil.which("llama-bench")
+llama_bench_path = os.environ.get("LLAMA_BENCH_PATH")
+
 
 if llama_bench_path is None:
     raise FileNotFoundError("llama-bench not found in PATH. " \
