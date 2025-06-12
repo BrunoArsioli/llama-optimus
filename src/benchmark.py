@@ -4,9 +4,10 @@ import optuna
 
 # You can later move these to search_space.py if desired
 SEARCH_SPACE = {
-    'threads': {'low': 1, 'high': 12},          # Adjust range to your hardware
-    'n_batch': {'low': 16, 'high': 1024, 'log': True},
-    'gpu_layers': {'low': 0, 'high': 70}        # Set max to model + VRAM; The max value must be found first
+    'threads':    {'low': 1, 'high': 12},       # Adjust range to your hardware
+    'n_batch':    {'low': 16, 'high': 8192, 'log': True},
+    'gpu_layers': {'low': 0, 'high': 70}        # (-ngl) Set max to model + VRAM; The max value must be found first
+    'm_map':      {'low': 0, 'high': 1}         # Enable memory mapping when models are loaded (defaut:0)
 }
 
 
@@ -23,16 +24,19 @@ def objective(trial):
     threads    = trial.suggest_int('threads', SEARCH_SPACE['threads']['low'], SEARCH_SPACE['threads']['high'])
     n_batch    = trial.suggest_int('n_batch', SEARCH_SPACE['n_batch']['low'], SEARCH_SPACE['n_batch']['high'], log=SEARCH_SPACE['n_batch'].get('log', False))
     gpu_layers = trial.suggest_int('gpu_layers', SEARCH_SPACE['gpu_layers']['low'], SEARCH_SPACE['gpu_layers']['high'])
+    m_map      = trial.suggest_int('m_map', SEARCH_SPACE['m_map']['low'], SEARCH_SPACE['m_map']['high'])
 
     # Build llama-bench command (edit as needed)
     cmd = [
         "llama-bench",         # path to your llama-bench binary
         "-t", str(threads),
         "--n_batch", str(n_batch),
-        "--gpu-layers", str(gpu_layers),
+        "--gpu-layers", str(gpu_layers),    # (-ngl flag)
         "--model", "PATH_TO_MODEL.gguf",    # <--- change this or parametrize
-        "-n", "128",             # tokens to generate (enough for steady throughput)
-        "-p", "Test prompt."     # or any prompt
+        "-n", "80",             # tokens to generate (larger value improve final statistics, i.e. lower std intok/s)
+        "-p", "80",             # tokens to process (larger value improve final statistics, i.e. lower std intok/s)
+        "m_map", str(m_map),    # 0; load entire model to RAM. 1; map memory and load what is needed 
+        "-r", "5"               # number of benchmark runs for each configuration; mean value and std calculated from it 
     ]
 
     try:
