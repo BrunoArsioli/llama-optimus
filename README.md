@@ -46,12 +46,16 @@ Lightweight Python tool using Optuna for tuning llama.cpp flags: towards optimal
         my_path/llama.cpp/build/bin. Copy this entire path.
 
         For Zsh (~/.zshrc):
-            '''echo 'export LLAMA_BENCH_PATH="my_path/llama.cpp/build/bin/llama-bench:$LLAMA_BENCH_PATH" ' >> ~/.zshrc '''
-            '''source ~/.zshrc'''         
+            ````
+            echo 'export LLAMA_BENCH_PATH="my_path/llama.cpp/build/bin/llama-bench:$LLAMA_BENCH_PATH" ' >> ~/.zshrc 
+            source ~/.zshrc
+            ```         
 
         Or, use the full path in your benchmar.py script:
             Just replace "llama_bench_path" in your code with the actual path, e.g.:
-            ```llama_bench_path = "my_path/llama.cpp/build/bin/llama-bench"```
+            ```
+            llama_bench_path = "my_path/llama.cpp/build/bin/llama-bench"
+            ```
 
 
 
