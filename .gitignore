@@ -7,6 +7,31 @@ __pycache__/
 my_local_paths.sh
 legacy_files/
 
+# macOS Finder metadata
+.DS_Store
+
+# Python virtual environments
+.venv/
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+.pytest_cache/
+.venv/
+env/
+venv/
+
+# Editors/IDEs
+.vscode/
+.idea/
+
+# Build
+dist/
+build/
+*.egg-info/
+
 # C extensions
 *.so
 
