@@ -115,7 +115,7 @@ def objective(trial, metric):
     # note1: memory mapping is now set by defaut. Instead, need to add --no-map flag. 
     # note2: use "-r 5" for more robust results (mean value calculated over 5 llama-bench runs); Use "-r 1" for quick assessment 
     #        e.g., launch tool with: python src/optimus.py --trials 30 -r 1 
-    
+
     # Add task-specific flags
     if metric in ("tg", "mean"):
         cmd += ["-n", "40"]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
@@ -135,7 +135,42 @@ def run_optimization(n_trials=35, metric="tg"):  # (default: 35 trials, metric="
     # use lambda to inject metric 
     study.optimize(lambda trial: objective(trial, metric), n_trials=n_trials)
     print("Best config:", study.best_trial.params)
-    print("Best tokens/sec:", study.best_value)
+    print(f"Best {metric} tokens/sec:", study.best_value)
+
+    # output: ready to use llama-server command with best llama.cpp parameters
+    best = study.best_trial.params
+    #command = f"{llama_bin_path}/llama-server --model {model_path} -t {best['threads']} --batch-size {best['batch']} --ubatch-size {best['u_batch']} -ngl {best['gpu_layers']} --flash-attn {best['flash']}"
+    #print("\n# Copy and paste to run llama-server with these optimized settings:\n" + command)
+
+    print("\n# You are ready to run a local llama-server:")
+
+    # 1. llama-server (inference); listening at http://127.0.0.1:8080/ in your browser. 
+    llama_server_cmd = (
+        f"{llama_bin_path}/llama-server --model {model_path}"
+        f" -t {best['threads']}"
+        f" --batch-size {best['batch']}"
+        f" --ubatch-size {best['u_batch']}"
+        f" -ngl {best['gpu_layers']}"
+        f" --flash-attn {best['flash']}"
+    )
+    print("\n# For optimal inference:")
+    print(llama_server_cmd)
+
+    # 2. llama-bench (benchmark for both tg and pp)
+    llama_bench_cmd = (
+        f"{llama_bench_path}"
+        f" --model {model_path}"
+        f" -t {best['threads']}"
+        f" --batch-size {best['batch']}"
+        f" --ubatch-size {best['u_batch']}"
+        f" -ngl {best['gpu_layers']}"
+        f" --flash-attn {best['flash']}"
+        f" -n 128 -p 128 -r 3 -o csv"
+    )
+    print("\n# To benchmark both generation and prompt processing speeds:")
+    print(llama_bench_cmd)
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="llama-optimus: Benchmark & tune llama.cpp.")

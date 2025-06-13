@@ -58,6 +58,7 @@ python src/optimus.py --llama-bin /path/to/llama.cpp/build/bin \
                       --trials 20 \
                       --repeat 2 \
                       --ngl-max 32
+```
 
 - All arguments are optional except `--llama-bin` and `--model` (if not set as env variables).
 - CLI flags **override environment variables**.
@@ -68,7 +69,8 @@ export LLAMA_BIN=/path/to/llama.cpp/build/bin
 export MODEL_PATH=/path/to/model.gguf
 python src/optimus.py
 ```
-### Option C: **(Convenience) Source a helper script**
+
+### Option C: **Source a helper script to set your local variables**
 Edit and `source set_local_paths.sh` (see template in repo).
 
 ---
