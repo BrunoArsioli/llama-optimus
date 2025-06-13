@@ -16,7 +16,7 @@
 
 
 <p align="center">
-    <img src="assets/llama.optimus_logo.png" width="500">
+    <img src="assets/llama.optimus_llama_optuna_logo.png" width="600">
 </p>
 
 
@@ -162,12 +162,22 @@ MIT License (see LICENSE).
 
 ## Acknowledgements
 
-<p align="center"><img src="assets/llama.cpp_logo.png" width="500"></p>
+**Build with Optuna**
+
+<p align="left"><img src="assets/optuna_logo.png" width="500"></p>
+- [Optuna](https://optuna.org/)
+
+<br>
+
+**Made for llama.cpp**
+
+<p align="left"><img src="assets/llama.cpp_logo.png" width="500"></p>
 - [llama.cpp](https://github.com/ggerganov/llama.cpp)
 
+<br>
 
-<p align="center"><img src="assets/optuna_logo.png" width="500"></p>
-- [Optuna](https://optuna.org/)
+**llama.optimus**
+<p align="left"><img src="assets/llama.optimus_logo.png" width="500"></p>
 
 ---
 
