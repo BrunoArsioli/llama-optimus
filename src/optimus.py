@@ -24,8 +24,8 @@ SEARCH_SPACE = {
 # llama-bench crash if ngl is too large. Depends on model and hardware
 def estimate_max_ngl(min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high']):
     low, high = min_ngl, max_ngl
-    print("Started running estimate for the maximum number of model layer (-ngl) " \
-    "that can be passed to you RAM memory")
+    print("First, we need to estimate the maximum number of model layer (-ngl) " \
+    "that can be loaded to your RAM memory.")
 
     while low < high:
         mid = (low + high + 1) // 2
@@ -72,26 +72,26 @@ def run_llama_bench_with_csv(cmd, metric):
         csvfile.write(result.stdout)
         csv_path = csvfile.name
 
-        df = pd.read_csv(csv_path)
-        metric_value = 0. # start metric value
+    df = pd.read_csv(csv_path)
+    metric_value = 0. # start metric value
 
-        if metric == "tg":
-            tg_rows = df[df["n_gen"] > 0]
-            if not tg_rows.empty: # writes only if tg_row is not empty 
-                metric_value = float(tg_rows["avg_ts"].iloc[0])
-        elif metric == "pp":
-            pp_rows = df[df["n_prompt"] > 0]
-            if not pp_rows.empty: # writes only if pp_row is not empty 
-                metric_value = float(pp_rows["avg_ts"].iloc[0])
-        elif metric == "mean":
-            tg_rows = df[df["n_gen"] > 0]
-            pp_rows = df[df["n_prompt"] > 0]
-            if not tg_rows.empty and not pp_rows.empty: # writes only if tg_ and pp_row are not empty 
-                metric_value = 0.5 * (float(tg_rows["avg_ts"].iloc[0]) + float(pp_rows["avg_ts"].iloc[0]))
-        return metric_value
+    if metric == "tg":
+        tg_rows = df[df["n_gen"] > 0]
+        if not tg_rows.empty: # writes only if tg_row is not empty 
+            metric_value = float(tg_rows["avg_ts"].iloc[0])
+    elif metric == "pp":
+        pp_rows = df[df["n_prompt"] > 0]
+        if not pp_rows.empty: # writes only if pp_row is not empty 
+            metric_value = float(pp_rows["avg_ts"].iloc[0])
+    elif metric == "mean":
+        tg_rows = df[df["n_gen"] > 0]
+        pp_rows = df[df["n_prompt"] > 0]
+        if not tg_rows.empty and not pp_rows.empty: # writes only if tg_ and pp_row are not empty 
+            metric_value = 0.5 * (float(tg_rows["avg_ts"].iloc[0]) + float(pp_rows["avg_ts"].iloc[0]))
+    return metric_value
 
 
-def objective(trial):
+def objective(trial, metric):
     # Sample params
     batch      = trial.suggest_categorical('batch', SEARCH_SPACE['batch_size'])
     flash      = trial.suggest_categorical('flash', SEARCH_SPACE['flash_attn'])
@@ -112,25 +112,27 @@ def objective(trial):
         "-r"            , "2",             # number of benchmark runs for each configuration; mean value and std calculated from it 
         "-o"            , "csv"            # save temporary .csv file with llama-bench outputs
     ]
-    # note: memory mapping is now set by defaut. Instead, need to add --no-map flag. 
+    # note1: memory mapping is now set by defaut. Instead, need to add --no-map flag. 
+    # note2: increase "-r" to "5" if you want more robust results (mean value calculated over 5 runs)
 
     # Add task-specific flags
-    if args.metric in ("tg", "mean"):
+    if metric in ("tg", "mean"):
         cmd += ["-n", "40"]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
-    if args.metric in ("pp", "mean"):
+    if metric in ("pp", "mean"):
         cmd += ["-p", "40"]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
 
     try:
-        tokens_per_sec = run_llama_bench_with_csv(cmd, arg.metric)
+        tokens_per_sec = run_llama_bench_with_csv(cmd, metric)
         return tokens_per_sec    
     except Exception as e:
         print(f"Error: {e}")
         return 0.0
 
 
-def run_optimization(n_trials=35):
+def run_optimization(n_trials=35, metric="tg"):  # (default: 35 trials, metric="tg" ; token generation speed)
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=n_trials)
+    # use lambda to inject metric 
+    study.optimize(lambda trial: objective(trial, metric), n_trials=n_trials)
     print("Best config:", study.best_trial.params)
     print("Best tokens/sec:", study.best_value)
 
@@ -140,7 +142,9 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, help="Path to model (overrides env var)")
     parser.add_argument("--llama-bin", type=str, help="Path to llama.cpp build/bin folder (overrides env var)")
     parser.add_argument("--metric", type=str, default="tg", choices=["tg", "pp", "mean"],
-    help="Which throughput metric to optimize: 'tg' (token generation, default), 'pp' (prompt processing), or 'mean' (average of both)")
+        help="Which throughput metric to optimize: 'tg' (token generation, default), 'pp' (prompt processing), or 'mean' (average of both)")
+    parser.add_argument("--ngl-max",type=int, 
+        help="Maximum number of model layers for -ngl (skip estimation if provided; estimation runs by defaut).")
     args = parser.parse_args()
 
     # Set paths based on CLI flags or env vars
@@ -162,10 +166,15 @@ if __name__ == "__main__":
     print(f"Path to 'llama-bench':{llama_bench_path}")  # in llama.cpp/tools/
     print(f"Path to 'model.gguf' file:{model_path}")
 
-    # estimate maximum number of layers before run 
-    SEARCH_SPACE['gpu_layers']['high'] = estimate_max_ngl()
-    print(f"Setting maximum -ngl to {SEARCH_SPACE['gpu_layers']['high']}")
+    # defaut: estimate maximum number of layers before run_optimization 
+    # in case the user knows ngl_max value, squipe ngl_max estimate
+    if args.ngl_max is not None: 
+        SEARCH_SPACE['gpu_layers']['high'] = args.ngl_max
+        print(f"User-specified maximum -ngl set to {args.ngl_max}")
+    else:
+        SEARCH_SPACE['gpu_layers']['high'] = estimate_max_ngl()
+        print(f"Setting maximum -ngl to {SEARCH_SPACE['gpu_layers']['high']}")
 
-    run_optimization(n_trials=args.trials)
+    run_optimization(n_trials=args.trials, metric=args.metric)  
 
 
