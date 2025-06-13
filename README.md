@@ -28,6 +28,14 @@
 - **CLI interface:** All major parameters and paths are settable via command line or environment variable.
 - **Built on:** [Optuna](https://optuna.org/) for hyperparameter optimization and [llama.cpp](https://github.com/ggerganov/llama.cpp) for inference.
 
+## Features
+- **Bayesian optimization** (Optuna) to maximize tokens/sec for prompt processing or generation
+- Easily adapts to Apple Silicon, Linux x86, and NVIDIA GPU systems
+- CLI for seamless integration in scripts or interactive exploration
+- Outputs copy-paste-ready commands for `llama-server` and `llama-bench`
+- Quick/robust benchmarks (controlable via `-r` flag)
+- Fail-safe: avoids failed internal trials (via pre-accessment of the maxmum number of layers that can be passed to your GPU RAM)
+
 ---
 
 ## Requirements
@@ -52,84 +60,124 @@
     source .venv/bin/activate
     ```
 
-3. **Install Python dependencies:**
+3. **Install Python dependencies in editable/developer mode:**
+    ```bash
+    pip install -e .
+    ```
+
+    Or, to install just requirements (if not developing):
     ```bash
     pip install -r requirements.txt
     ```
 
 4. **Build llama.cpp:**
     - Follow the [llama.cpp instructions](https://github.com/ggerganov/llama.cpp#build).
-    - Note your full path to `llama-bench` (e.g., `/your/path/llama.cpp/build/bin/llama-bench`).
+    - Note your full path to `llama-bin` (e.g., `/your/path/llama.cpp/build/bin`) for this tool to work.
 
 ---
 
 ## ⚙️ Configuration
 
-### Option A: **Pass as CLI flags (recommended)**
-```bash
-python src/optimus.py --llama-bin /path/to/llama.cpp/build/bin \
-                      --model /path/to/model.gguf \
-                      --metric tg \
-                      --trials 20 \
-                      --repeat 2 \
-                      --ngl-max 32
-```
-
 - All arguments are optional except `--llama-bin` and `--model` (if not set as env variables).
 - CLI flags **override environment variables**.
 
-### Option B: **Set as environment variables**
+### Option A: **Set as environment variables**
 ```bash
 export LLAMA_BIN=/path/to/llama.cpp/build/bin
 export MODEL_PATH=/path/to/model.gguf
 python src/optimus.py
 ```
 
-### Option C: **Source a helper script to set your local variables**
-Edit and `source set_local_paths.sh` (see template in repo).
+then you only need:
+```bash
+llama-optimus
+```
+
+### Option B: Pass as CLI flags
+
+```bash
+llama-optimus --llama-bin ~my_path_to/llama.cpp/build/bin --model ~my_path_to/models/my-model.gguf
+```
+
+### Option C: Source a helper script
+You may create a script (e.g., set_local_paths.sh) with the content:
+```bash
+#!/usr/bin/env bash
+export LLAMA_BIN=~my_path_to/llama.cpp/build/bin
+export MODEL_PATH=~my_path_to/models/my-model.gguf
+```
+and `source set_local_paths.sh` before running `llama-optimus`.
 
 ---
 
 ## Usage
 
-| Flag               | Default   | Description                                                                                   |
-|--------------------|-----------|-----------------------------------------------------------------------------------------------|
-| `--llama-bin`      | *(env)*   | Path to folder containing `llama-bench`                                                       |
-| `--model`          | *(env)*   | Path to GGUF model file                                                                       |
-| `--metric`         | `tg`      | Which metric to optimize: `tg` (generation), `pp` (processing), `mean` (average of both)      |
-| `--trials`         | `35`      | Number of Optuna optimization trials                                                          |
-| `--repeat`, `-r`   | `2`       | Number of runs per trial (higher=more robust; lower=faster)                                   |
-| `--ngl-max`        | *(auto)*  | Max model layers for `-ngl`. Skip estimation if provided                                      |
+```bash
+llama-optimus --llama-bin my_path_to/llama.cpp/build/bin --model my_path_to/model.gguf --trials 25 --metric tg
+```
 
-### **Examples**
-- **Optimize for generation speed:**  
-    ```bash
-    python src/optimus.py --llama-bin ... --model ... --metric tg
-    ```
-- **Optimize for prompt processing speed:**  
-    ```bash
-    python src/optimus.py --metric pp
-    ```
-- **Fast test:**  
-    ```bash
-    python src/optimus.py --trials 1 --repeat 1
-    ```
-- **User-known max layers:**  
-    ```bash
-    python src/optimus.py --ngl-max 32
-    ```
+Or, if you prefer to use environment variables :
+
+```bash
+export LLAMA_BIN=my_path_to/llama.cpp/build/bin
+export MODEL_PATH=my_path_to/model.gguf
+llama-optimus --trials 25 --metric tg
+```
+
+**Common arguments:**
+
+* `--llama-bin`  Path to your llama.cpp `build/bin` directory (or set `$LLAMA_BIN`)
+* `--model`      Path to your `.gguf` model file (or set `$MODEL_PATH`)
+* `--trials`   Number of optimization trials (default: 35)
+* `--metric`   Which throughput metric to optimize:
+  `tg` = token generation speed,
+  `pp` = prompt processing speed,
+  `mean` = average of both
+* `-r` / `--repeat`   How many repetitions per configuration (default: 2; use 1 for quick/dirty, 5 for robust)
+
+See all options:
+
+```bash
+llama-optimus --help
+```
+
+---
+
+## How it works
+
+- Uses Optuna to search for the best combination of `llama.cpp` flags (batch size, ubatch, threads, ngl, etc).
+
+- Runs quick benchmarks (with `llama-bench`) for each config, parses results from the CSV, and feeds back to the optimizer.
+
+- Finds the best flags in minutes —no need to try random combinations!
+
+- Handles errors (non-working configs are skipped).
 
 ---
 
 ## Output
 
-After running, you will see:
-- **The best config found** (Optuna trial with parameters)
-- **Tokens/sec** for your selected metric
-- Intermediate logs of each trial
+* After running, you'll see:
 
-> Save output for later:  
-> `python src/optimus.py ... > results.txt`
+  * The best configuration found for your hardware/model.
+  * **A ready-to-copy `llama-server` command line** for running optimal inference.
+  * **A ready-to-copy `llama-bench` command** for benchmarking both prompt processing and generation speeds.
+  * Example output:
+
+```
+Best config: {'batch': 4096, 'flash': 1, 'u_batch': 1024, 'threads': 4, 'gpu_layers': 93}
+Best tg tokens/sec: 73.5
+
+# You are ready to run a local llama-server:
+
+# For optimal inference:
+llama-server --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1024 -ngl 93 --flash-attn 1
+
+# To benchmark both generation and prompt processing speeds:
+llama-bench --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1024 -ngl 93 --flash-attn 1 -n 128 -p 128 -r 3 -o csv
+
+# In case you want Image-to-text capabilities on your server, you will need to add a flag: --mmproj my_path_to/mmproj_file.ggfu ; Every Image-to-text model has a projection file available. 
+```
 
 ---
 
@@ -143,9 +191,53 @@ After running, you will see:
 
 - **`llama-bench not found`**: Check your `--llama-bin` path or `LLAMA_BIN` env var.
 - **`MODEL_PATH not set`**: Use `--model` or set the env variable.
-- **Zero tokens/sec**: Try reducing `--ngl-max` or verifying your model is compatible with your hardware.
+- **Zero tokens/s**: Try reducing `--ngl-max` or verifying your model is compatible with your hardware.
 
 ---
+
+## Project Structure
+
+```bash
+llama-optimus/
+│
+├── llama_optimus/
+│   ├── __init__.py
+│   ├── core.py      # all optimization/benchmark logic
+│   └── cli.py       # CLI interface (argparse, entrypoint)
+│
+├── test/
+│   └── test_core.py
+│
+├── assets/
+│   └── llama.optimus_logo.png
+│
+├── requirements.txt
+├── setup.py
+└── README.md
+```
+
+---
+
+## FAQ
+**Q:** Does this tune all `llama.cpp` options? 
+**A:** No, just the most performance-relevant (batch sizes, threads, GPU layers, Flash-Attn). Feel free to extend the SEARCH_SPACE dictionary.
+
+**Q:** Can I use this with non-Meta models?
+**A:** Yes! Any GGUF model supported by your llama.cpp build.
+
+**Q:** Is it safe for my hardware?
+**A:** Yes. Non-working configs are skipped, and benchmarks use conservative timeouts.
+
+---
+
+## Development & Testing
+Write your own test scripts in `/test` (see `test_core.py` for simple mocking).
+
+All major code logic is in `llama_optimus/core.py`.
+
+Install in dev/edit mode: `pip install -e .`
+
+Run CLI directly: `llama-optimus ...` or `python -m llama_optimus.cli ...`
 
 ## Contributing
 
