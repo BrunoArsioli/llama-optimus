@@ -162,7 +162,11 @@ MIT License (see LICENSE).
 
 ## Acknowledgements
 
+<p align="center"><img src="assets/llama.cpp_logo.png" width="500"></p>
 - [llama.cpp](https://github.com/ggerganov/llama.cpp)
+
+
+<p align="center"><img src="assets/optuna_logo.png" width="500"></p>
 - [Optuna](https://optuna.org/)
 
 ---
