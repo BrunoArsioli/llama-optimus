@@ -1,9 +1,24 @@
 # llama-optimus
 
-> **Lightweight Python tool to automatically optimize `llama.cpp` performance flags for maximum throughput (processing or generation: tokens/sec), using Optuna.**  
+> **Running Local AI?**
+>
+> **Maximize your token/s for prompt processing (pp) & token generation (tg)**
+>
+> llama-optimus is a lightweight Python tool to automatically optimize `llama.cpp` performance flags for maximum throughput.
+>
 > Supports Apple Silicon, Linux, and NVIDIA GPUs.
+>
+> **Brings Bayesian optimization (Optuna) to your local or embedded AI models.**
+>
+> **Find the *BEST* performance flags for *YOUR* unique hardware in minutes.**
 
 ---
+
+
+<p align="center">
+    <img src="assets/llama.optimus_logo.png" width="500">
+</p>
+
 
 ## What does llama-optimus do?
 

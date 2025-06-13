@@ -6,13 +6,14 @@ import shutil
 import pandas as pd 
 import tempfile
 import argparse 
+import sys
 
 # count number of available cpus
 max_threads = os.cpu_count()
 
 # You can later move these to search_space.py if desired
 SEARCH_SPACE = {
-    #'m_map': [0,1],          # Enable memory mapping when models are loaded (defaut:0)
+    #'m_map': [0,1],          # Enable memory mapping when models are loaded (default:0)
     'flash_attn': [0,1],     #  --flash-attn <0|1>  ; Enables flash attention       
     'gpu_layers': {'low': 0, 'high': 99},           # (-ngl) Set max to model + VRAM; The max value must be found first
     'threads':    {'low': 1, 'high': max_threads},  # Adjust range to your hardware
@@ -22,7 +23,21 @@ SEARCH_SPACE = {
 
 # estimate max value for number of layers; ngl 
 # llama-bench crash if ngl is too large. Depends on model and hardware
+
 def estimate_max_ngl(min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high']):
+    """
+    Estimate the maximum number of model layers (-ngl) that can be loaded into GPU/VRAM
+    for the current hardware and selected model. Uses a binary search, running llama-bench
+    with minimal workload for each ngl value, and returns the highest value that does not crash.
+
+    Parameters:
+        min_ngl (int): The minimum ngl value to try (default: 0).
+        max_ngl (int): The maximum ngl value to try (default: 99, set by SEARCH_SPACE).
+
+    Returns:
+        int: The highest working ngl value for this model/hardware.
+    """
+
     low, high = min_ngl, max_ngl
     print("First, we need to estimate the maximum number of model layer (-ngl) " \
     "that can be loaded to your RAM memory.")
@@ -46,19 +61,23 @@ def estimate_max_ngl(min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high']):
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             high = mid - 1  # failure → reduce range
         
-        #try:
-        #    subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=True)
-        #    low = mid  # success → try higher
-        #except subprocess.CalledProcessError:
-        #    high = mid - 1  # failure → reduce range
     print(f"Estimated max ngl = {low}")
     return low
 
 
 
 def run_llama_bench_with_csv(cmd, metric):
-    # cmd should include: ... "-o", "csv"
-    # use metric (a string: "tg", "pp", or "mean")
+    """
+    Run llama-bench using the specified command, saving the output as a temporary CSV,
+    and extract the desired throughput metric from the CSV output.
+
+    Parameters:
+        cmd (list): The full command (as a list) to run llama-bench.
+        metric (str): Which throughput metric to extract: "tg", "pp", or "mean".
+
+    Returns:
+        float: The value of the selected metric, or 0.0 if it cannot be extracted.
+    """    
 
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     if result.returncode != 0:
@@ -92,6 +111,17 @@ def run_llama_bench_with_csv(cmd, metric):
 
 
 def objective(trial, metric):
+    """
+    Objective function for Optuna optimization. Samples a set of performance parameters,
+    builds the llama-bench command, runs the benchmark, and returns the throughput metric.
+
+    Parameters:
+        trial (optuna.trial.Trial): The current Optuna trial object.
+        metric (str): The performance metric to optimize ("tg", "pp", or "mean").
+
+    Returns:
+        float: The throughput value to maximize (tokens/sec).
+    """
     # Sample params
     batch      = trial.suggest_categorical('batch', SEARCH_SPACE['batch_size'])
     flash      = trial.suggest_categorical('flash', SEARCH_SPACE['flash_attn'])
@@ -104,15 +134,15 @@ def objective(trial, metric):
     cmd = [
         llama_bench_path, # path to your llama-bench binary
         "-t"            , str(threads),
-        "--batch-size"  , str(batch),      # (-b flag) (defaut 2024)
-        "--ubatch-size" , str(u_batch),    # (-ub flag) (defaut 512) 
+        "--batch-size"  , str(batch),      # (-b flag) (default 2024)
+        "--ubatch-size" , str(u_batch),    # (-ub flag) (default 512) 
         "-ngl"          , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
         "--flash-attn"  , str(flash),      # enables Flash Attention, a performance optimization during inference. 
         "--model"       , model_path,      # <--- change this or parametrize
         "-r"            , str(args.repeat),# number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
         "-o"            , "csv"            # save temporary .csv file with llama-bench outputs
     ]
-    # note1: memory mapping is now set by defaut. Instead, need to add --no-map flag. 
+    # note1: memory mapping is now set by default. Instead, need to add --no-map flag. 
     # note2: use "-r 5" for more robust results (mean value calculated over 5 llama-bench runs); Use "-r 1" for quick assessment 
     #        e.g., launch tool with: python src/optimus.py --trials 30 -r 1 
 
@@ -128,9 +158,22 @@ def objective(trial, metric):
     except Exception as e:
         print(f"Error: {e}")
         return 0.0
+    # return 0.0 is OK for Optuna/bench scripts; 
+    # i.e. this trial will be considered a failure but not fatal.
 
+def run_optimization(n_trials=35, metric="tg"):  
+    """
+    Run the Optuna optimization loop for a given number of trials, using the provided metric.
+    At the end, print the best configuration and ready-to-use commands for llama-server/llama-bench.
 
-def run_optimization(n_trials=35, metric="tg"):  # (default: 35 trials, metric="tg" ; token generation speed)
+    Parameters:
+        n_trials (int): Number of Optuna trials to perform. Default: 35.
+        metric (str): Which throughput metric to optimize ("tg", "pp", or "mean"). Default: tg.
+
+    Returns:
+        None
+    """
+
     study = optuna.create_study(direction="maximize")
     # use lambda to inject metric 
     study.optimize(lambda trial: objective(trial, metric), n_trials=n_trials)
@@ -173,46 +216,60 @@ def run_optimization(n_trials=35, metric="tg"):  # (default: 35 trials, metric="
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="llama-optimus: Benchmark & tune llama.cpp.")
-    parser.add_argument("--trials", type=int, default=35, help="Number of Optuna trials: n searches in parameter space")
-    parser.add_argument("--model", type=str, help="Path to model (overrides env var)")
-    parser.add_argument("--llama-bin", type=str, help="Path to llama.cpp build/bin folder (overrides env var)")
-    parser.add_argument("--metric", type=str, default="tg", choices=["tg", "pp", "mean"],
-        help="Which throughput metric to optimize: 'tg' (token generation, default), 'pp' (prompt processing), or 'mean' (average of both)")
-    parser.add_argument("--ngl-max",type=int, 
-        help="Maximum number of model layers for -ngl (skip estimation if provided; estimation runs by defaut).")
-    parser.add_argument("--repeat", "-r", type=int, default=2,
-        help="Number of llama-bench runs per configuration (higher = more robust, lower = faster; default: 2, for quick assessement: 1)")
-    args = parser.parse_args()
+    try:
+        parser = argparse.ArgumentParser(
+            description="llama-optimus: Benchmark & tune llama.cpp.",
+            epilog="""
+            Example usage:
 
-    # Set paths based on CLI flags or env vars
-    llama_bin_path = args.llama_bin if args.llama_bin else os.environ.get("LLAMA_BIN")
-    llama_bench_path = f"{llama_bin_path}/llama-bench"
-    model_path = args.model if args.model else os.environ.get("MODEL_PATH")
+                python optimus.py --llama-bin ~/llama.cpp/build/bin --model ./models/my-model.gguf --trials 35 --metric tg
+                
+            for a quick test (set a single Optuna trial and a single repetition of llama-bench):
+                
+                python optimus.py --llama-bin ~/llama.cpp/build/bin --model ./models/my-model.gguf --trials 1 -r 1 --metric tg
+            """,
+            formatter_class=argparse.RawDescriptionHelpFormatter
+        )
+        parser.add_argument("--trials", type=int, default=35, help="Number of Optuna/optimization trials")
+        parser.add_argument("--model", type=str, help="Path to model (overrides env var)")
+        parser.add_argument("--llama-bin", type=str, help="Path to llama.cpp build/bin folder (overrides env var)")
+        parser.add_argument("--metric", type=str, default="tg", choices=["tg", "pp", "mean"], help="Which throughput metric to optimize: 'tg' (token generation, default), 'pp' (prompt processing), or 'mean' (average of both)")
+        parser.add_argument("--ngl-max",type=int, help="Maximum number of model layers for -ngl (skip estimation if provided; estimation runs by default).")
+        parser.add_argument("--repeat", "-r", type=int, default=2,help="Number of llama-bench runs per configuration (higher = more robust, lower = faster; default: 2, for quick assessement: 1)")
+        parser.add_argument('--version', "-v", action='version', version='llama-optimus v0.1.0')
+        args = parser.parse_args()
 
-    if llama_bin_path is None or model_path is None:
-        raise ValueError("LLAMA_BIN or MODEL_PATH not set. Set via environment variable or pass via CLI flags.")
+        # Set paths based on CLI flags or env vars
+        llama_bin_path = args.llama_bin if args.llama_bin else os.environ.get("LLAMA_BIN")
+        llama_bench_path = f"{llama_bin_path}/llama-bench"
+        model_path = args.model if args.model else os.environ.get("MODEL_PATH")
 
-    if not os.path.isfile(llama_bench_path):
-        raise FileNotFoundError(f"llama-bench not found at {llama_bench_path}." \
-        "Please, install llama.cpp and make sure to set your local LLAMA_BIN variable. "
-        "(i.e. edit approprietely and run the script named 'set_local_paths.sh')" \
-        "alternative: comment the 'llama_bench_path = xxxxx' line and " \
-        "add a line 'llama_bench_path = \"PATH_TO_LLAMA-BENCH\" ' to define the path to llama-bench.") 
+        if llama_bin_path is None or model_path is None:
+            print("ERROR: LLAMA_BIN or MODEL_PATH not set. Set via environment variable or pass via CLI flags.", file=sys.stderr)
+            sys.exit(1)
 
-    print(f"Number of CPUs: {max_threads}.")
-    print(f"Path to 'llama-bench':{llama_bench_path}")  # in llama.cpp/tools/
-    print(f"Path to 'model.gguf' file:{model_path}")
+        if not os.path.isfile(llama_bench_path):
+            print(f"ERROR: llama-bench not found at {llama_bench_path}. ...", file=sys.stderr)
+            sys.exit(1)
 
-    # defaut: estimate maximum number of layers before run_optimization 
-    # in case the user knows ngl_max value, squipe ngl_max estimate
-    if args.ngl_max is not None: 
-        SEARCH_SPACE['gpu_layers']['high'] = args.ngl_max
-        print(f"User-specified maximum -ngl set to {args.ngl_max}")
-    else:
-        SEARCH_SPACE['gpu_layers']['high'] = estimate_max_ngl()
-        print(f"Setting maximum -ngl to {SEARCH_SPACE['gpu_layers']['high']}")
+        print(f"Number of CPUs: {max_threads}.")
+        print(f"Path to 'llama-bench':{llama_bench_path}")  # in llama.cpp/tools/
+        print(f"Path to 'model.gguf' file:{model_path}")
 
-    run_optimization(n_trials=args.trials, metric=args.metric)  
+        # default: estimate maximum number of layers before run_optimization 
+        # in case the user knows ngl_max value, skipe ngl_max estimate
+        if args.ngl_max is not None: 
+            SEARCH_SPACE['gpu_layers']['high'] = args.ngl_max
+            print(f"User-specified maximum -ngl set to {args.ngl_max}")
+        else:
+            SEARCH_SPACE['gpu_layers']['high'] = estimate_max_ngl()
+            print(f"Setting maximum -ngl to {SEARCH_SPACE['gpu_layers']['high']}")
+
+        run_optimization(n_trials=args.trials, metric=args.metric)  
+
+    except Exception as e:
+        print(f"Fatal error: {e}", file=sys.stderr)
+        sys.exit(1)
+
 
 
