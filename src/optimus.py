@@ -109,12 +109,13 @@ def objective(trial, metric):
         "-ngl"          , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
         "--flash-attn"  , str(flash),      # enables Flash Attention, a performance optimization during inference. 
         "--model"       , model_path,      # <--- change this or parametrize
-        "-r"            , "2",             # number of benchmark runs for each configuration; mean value and std calculated from it 
+        "-r"            , str(args.repeat),# number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
         "-o"            , "csv"            # save temporary .csv file with llama-bench outputs
     ]
     # note1: memory mapping is now set by defaut. Instead, need to add --no-map flag. 
-    # note2: increase "-r" to "5" if you want more robust results (mean value calculated over 5 runs)
-
+    # note2: use "-r 5" for more robust results (mean value calculated over 5 llama-bench runs); Use "-r 1" for quick assessment 
+    #        e.g., launch tool with: python src/optimus.py --trials 30 -r 1 
+    
     # Add task-specific flags
     if metric in ("tg", "mean"):
         cmd += ["-n", "40"]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
@@ -145,6 +146,8 @@ if __name__ == "__main__":
         help="Which throughput metric to optimize: 'tg' (token generation, default), 'pp' (prompt processing), or 'mean' (average of both)")
     parser.add_argument("--ngl-max",type=int, 
         help="Maximum number of model layers for -ngl (skip estimation if provided; estimation runs by defaut).")
+    parser.add_argument("--repeat", "-r", type=int, default=2,
+        help="Number of llama-bench runs per configuration (higher = more robust, lower = faster; default: 2, for quick assessement: 1)")
     args = parser.parse_args()
 
     # Set paths based on CLI flags or env vars
