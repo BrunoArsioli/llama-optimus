@@ -5,6 +5,7 @@ __pycache__/
 
 # local paths
 my_local_paths.sh
+legacy_files/
 
 # C extensions
 *.so

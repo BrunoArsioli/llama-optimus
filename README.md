@@ -1,130 +1,155 @@
 # llama-optimus
-Lightweight Python tool using Optuna for tuning llama.cpp flags: towards optimal tok/s for your machine.  
 
+> **Lightweight Python tool to automatically optimize `llama.cpp` performance flags for maximum throughput (processing or generation: tokens/sec), using Optuna.**  
+> Supports Apple Silicon, Linux, and NVIDIA GPUs.
 
-## What it does
+---
 
-* Runs performance benchmarks of llama.cpp across parameters (threads, batch size, GPU layers, etc.)
-* Uses Optuna to maximize tokens/sec on your specific hardware
-* Exports the winning config for reproducibility
-* Supports Apple Silicon, Linux, (next: NVIDIA platforms)
+## What does llama-optimus do?
 
-  
+- **Benchmarks and tunes** `llama.cpp` models for maximum `tokens/sec`, using automated parameter search.
+- **Optimizes for token generation, prompt processing, or both.**
+- **Estimates or accepts user-specified GPU layer count (`-ngl`).**
+- **CLI interface:** All major parameters and paths are settable via command line or environment variable.
+- **Built on:** [Optuna](https://optuna.org/) for hyperparameter optimization and [llama.cpp](https://github.com/ggerganov/llama.cpp) for inference.
+
+---
+
 ## Requirements
 
-- Python 3.10 or higher
-- llama.cpp (`llama-bench` or `llama-cli`) — see [llama.cpp repo](https://github.com/ggerganov/llama.cpp) for installation
+- Python 3.10+  
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) (built, with `llama-bench` present in `/build/bin/`)
+- At least one GGUF model file
+
+---
 
 ## Installation
 
-1. Install Python dependencies:
+1. **Clone this repo:**
+    ```bash
+    git clone https://github.com/YOUR-USERNAME/llama-optimus.git
+    cd llama-optimus
+    ```
 
+2. **(Recommended) Create and activate a Python virtualenv:**
+    ```bash
+    python3 -m venv .venv
+    source .venv/bin/activate
+    ```
+
+3. **Install Python dependencies:**
     ```bash
     pip install -r requirements.txt
     ```
 
-2. Install llama.cpp:
+4. **Build llama.cpp:**
+    - Follow the [llama.cpp instructions](https://github.com/ggerganov/llama.cpp#build).
+    - Note your full path to `llama-bench` (e.g., `/your/path/llama.cpp/build/bin/llama-bench`).
 
-    See [llama.cpp repository](https://github.com/ggerganov/llama.cpp) for full build instructions.
+---
 
-    Example (Linux/Mac):
+## ⚙️ Configuration
 
+### Option A: **Pass as CLI flags (recommended)**
+```bash
+python src/optimus.py --llama-bin /path/to/llama.cpp/build/bin \
+                      --model /path/to/model.gguf \
+                      --metric tg \
+                      --trials 20 \
+                      --repeat 2 \
+                      --ngl-max 32
+
+- All arguments are optional except `--llama-bin` and `--model` (if not set as env variables).
+- CLI flags **override environment variables**.
+
+### Option B: **Set as environment variables**
+```bash
+export LLAMA_BIN=/path/to/llama.cpp/build/bin
+export MODEL_PATH=/path/to/model.gguf
+python src/optimus.py
+```
+### Option C: **(Convenience) Source a helper script**
+Edit and `source set_local_paths.sh` (see template in repo).
+
+---
+
+## Usage
+
+| Flag               | Default   | Description                                                                                   |
+|--------------------|-----------|-----------------------------------------------------------------------------------------------|
+| `--llama-bin`      | *(env)*   | Path to folder containing `llama-bench`                                                       |
+| `--model`          | *(env)*   | Path to GGUF model file                                                                       |
+| `--metric`         | `tg`      | Which metric to optimize: `tg` (generation), `pp` (processing), `mean` (average of both)      |
+| `--trials`         | `35`      | Number of Optuna optimization trials                                                          |
+| `--repeat`, `-r`   | `2`       | Number of runs per trial (higher=more robust; lower=faster)                                   |
+| `--ngl-max`        | *(auto)*  | Max model layers for `-ngl`. Skip estimation if provided                                      |
+
+### **Examples**
+- **Optimize for generation speed:**  
     ```bash
-    git clone https://github.com/ggerganov/llama.cpp.git
-    cd llama.cpp
-    make
+    python src/optimus.py --llama-bin ... --model ... --metric tg
+    ```
+- **Optimize for prompt processing speed:**  
+    ```bash
+    python src/optimus.py --metric pp
+    ```
+- **Fast test:**  
+    ```bash
+    python src/optimus.py --trials 1 --repeat 1
+    ```
+- **User-known max layers:**  
+    ```bash
+    python src/optimus.py --ngl-max 32
     ```
 
-    Make sure the built CLI (`llama-bench`, `llama-cli`, etc.) is accessible in your PATH.
+---
 
-    You should either add the llama.cpp/build/bin path to your shell’s $PATH, or edit your benchmark.py script to use the full path to llama-bench.
+## Output
 
-3. Find the path to your llama.cpp/build/bin folder:
+After running, you will see:
+- **The best config found** (Optuna trial with parameters)
+- **Tokens/sec** for your selected metric
+- Intermediate logs of each trial
 
-    Go to your llama.cpp folder; After you build, go to llama.cpp/build/bin 
-    Use 'pwd' to print you path to build/bin folder, which should be something with the form
-    my_path/llama.cpp/build/bin. Copy this entire path.
+> Save output for later:  
+> `python src/optimus.py ... > results.txt`
 
-    Do the same and find the path to your AI models (i.e. gemma3xxxx.gguf file)
+---
 
-4. Edit the 'set_local_paths.sh' script 
+## How it works
 
-    You need to update this script, providing the paths to both llama.cpp/build/bin 
-    and to your model.gguf file. 
+- By default, estimates your hardware's max `-ngl` (GPU layers). If you know your max, use `--ngl-max` to skip this step.
+- Explores batch size, threads, microbatch, flash attention, and more, to maximize your chosen throughput metric.
 
-    (Note: If you have a big model, split in two or more files, e.g. Llama-4-Scout-17B-16E-Instruct-UD-Q5_K_XL-00001-of-00002.gguf and Llama-4-Scout-17B-16E-Instruct-UD-Q5_K_XL-00002-of-00002.gguf, 
-    you just need to provide a path pointing to 
-    the first file: Llama-4-Scout-17B-16E-Instruct-UD-Q5_K_XL-00001-of-00002.gguf. 
-    llama-bench will handle it for you)
+---
+## 🛟 Troubleshooting 🛟
 
-5. Run
-    ```bash
-    source set_local_paths.sh
-    python src/benchmark.py
-    ``` 
- 
- Results will show you the best configuration for token generation with llama.cpp.
+- **`llama-bench not found`**: Check your `--llama-bin` path or `LLAMA_BIN` env var.
+- **`MODEL_PATH not set`**: Use `--model` or set the env variable.
+- **Zero tokens/sec**: Try reducing `--ngl-max` or verifying your model is compatible with your hardware.
 
- Optimus tokens/s:  
+---
 
- ` (-t)   -->   'threads' `
+## Contributing
 
- ` (-b)   -->   'n_batch' `
+PRs, suggestions, and benchmarks welcome!  
+Open an issue or submit a PR.
 
- ` (-ngl) -->   'gpu_layers' `
- 
- ` (-mmp) -->   'm_map' `
+---
 
- ` (-ub)  -->   'ubatch-size' `
+## License
 
- ` (-fa)  -->   'flash-attn' `
+MIT License (see LICENSE).
+
+---
+
+## Acknowledgements
+
+- [llama.cpp](https://github.com/ggerganov/llama.cpp)
+- [Optuna](https://optuna.org/)
+
+---
+
+**Optimize your LLM inference—contribute your configs, and help the community improve!**
 
 
-
-
-6. The defaut llama.cpp configuration:
-
-  test parameters:
-
-  -d, --n-depth                          (default: 0)
-
-  -b, --batch-size                       (default: 2048)
-
-  -ub, --ubatch-size                     (default: 512)
-
-  -ctk, --cache-type-k                   (default: f16)
-
-  -ctv, --cache-type-v                   (default: f16)
-
-  -dt, --defrag-thold                    (default: -1)
-
-  -t, --threads                          (default: system dependent)
-
-  -C, --cpu-mask                         (default: 0x0)
-
-  --cpu-strict <0|1>                     (default: 0)
-
-  --poll <0...100>                       (default: 50)
-
-  -ngl, --n-gpu-layers                   (default: 99)
-
-  -rpc, --rpc                            (default: none)
-
-  -sm, --split-mode                      (default: layer)
-
-  -mg, --main-gpu                        (default: 0)
-
-  -nkvo, --no-kv-offload <0|1>           (default: 0)
-
-  -fa, --flash-attn <0|1>                (default: 0)
-
-  -mmp, --mmap <0|1>                     (default: 1)
-
-  -embd, --embeddings <0|1>              (default: 0)
-
-  -ts, --tensor-split <ts0/ts1/..>       (default: 0)
-
-  -ot --override-tensors <tensor name pattern>=<buffer type>;...
-                                            (default: disabled)
-
-  -nopo, --no-op-offload <0|1>              (default: 0)
