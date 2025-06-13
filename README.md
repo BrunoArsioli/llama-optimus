@@ -178,6 +178,7 @@ MIT License (see LICENSE).
 
 **llama.optimus**
 <p align="left"><img src="assets/llama.optimus_logo.png" width="500"></p>
+- [llama.optimus](https://github.com/BrunoArsioli/llama-optimus)
 
 ---
 
