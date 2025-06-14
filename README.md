@@ -189,6 +189,18 @@ llama-bench --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1
 - Explores batch size, threads, microbatch, flash attention, and more, to maximize your chosen throughput metric.
 
 ---
+## Tip 
+
+The default values for prompt proccessing `-p 40` and prompt generation `-n 40` gives fast trials.
+
+[**TBD**] add option for user control of -p and -n value in trials.
+
+For a more stable final score, re-run llama-bench with the best flags found:
+```bash
+llama-bench ... -p 512 -n 128 -r 5 -o csv
+```
+
+---
 ## 🛟 Troubleshooting 🛟
 
 - **`llama-bench not found`**: Check your `--llama-bin` path or `LLAMA_BIN` env var.
