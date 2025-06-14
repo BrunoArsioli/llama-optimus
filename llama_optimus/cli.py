@@ -21,7 +21,7 @@ def main():
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
         )
-    parser.add_argument("--trials", type=int, default=35, help="Number of Optuna/optimization trials")
+    parser.add_argument("--trials", type=int, default=45, help="Number of Optuna/optimization trials")
     parser.add_argument("--model", type=str, help="Path to model (overrides env var)")
     parser.add_argument("--llama-bin", type=str, help="Path to llama.cpp build/bin folder (overrides env var)")
     parser.add_argument("--metric", type=str, default="tg", choices=["tg", "pp", "mean"], help="Which throughput metric to optimize: 'tg' (token generation, default), 'pp' (prompt processing), or 'mean' (average of both)")

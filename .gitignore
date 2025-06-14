@@ -10,6 +10,7 @@ assets/logo_files
 
 # macOS Finder metadata
 .DS_Store
+*/.DS_Store
 
 # Python virtual environments
 .venv/

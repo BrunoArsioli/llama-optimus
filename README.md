@@ -2,6 +2,8 @@
 
 > **Running Local AI?**
 >
+> **Optimize llama.cpp hyperparameters**
+>
 > **Maximize your tokens/s for prompt processing (pp) & token generation (tg)**
 >
 > llama-optimus is a lightweight Python tool to automatically optimize `llama.cpp` performance flags for maximum throughput.
@@ -215,6 +217,20 @@ llama-optimus/
 ├── setup.py
 └── README.md
 ```
+
+---
+
+## Coments about other llama.cpp flags 
+
+| Flag                                                       | Why it matters                                                                                                                                                                                                                                                | Suggested search values                                                                                                    | Notes                                                                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **`--mmap / --no-mmap`** (memory-map model vs. fully load) | • On fast NVMe & Apple SSD, `--mmap 1` (default) is fine.<br>• On slower HDD/remote disks, disabling mmap (`--no-mmap` or `--mmap 0`) and loading the whole model into RAM often gives **10-20 % faster generation** (no page-fault stalls).                  | `[0, 1]` (boolean)                                                                                                         | Keep default `1`; let Optuna see if `0` wins on a given box.                                                                             |
+| **`--cache-type-k / --cache-type-v`**                      | Setting key/value cache to **`f16` vs `q4`** or **`i8`** trades RAM vs speed.  Most Apple-Metal & CUDA users stick with `f16` (fast, larger).  For low-RAM CPUs increasing speed is impossible if it swaps; `q4` can shrink cache 2-3× at \~3-5 % speed cost. | `["f16","q4"]` for both k & v (skip i8 unless you target very tiny devices).                                               | Only worth searching when the user is on **CPU-only** or small-VRAM GPU. You can gate this by detecting “CUDA not found” or VRAM < 8 GB. |
+| **`--main-gpu`** / **`--gpu-split`** (or `--tensor-split`) | Relevant only for multi-GPU rigs (NVIDIA).  Picking the right primary or a tensor split can cut VRAM fragmentation and enable higher `-ngl`.                                                                                                                  | If multi-GPU detected, expose `[0,1]` for `main-gpu` **and** a handful of tensor-split presets (`0,1`, `0,0.5,0.5`, etc.). | Keep disabled on single-GPU/Apple Silicon to avoid wasted trials.                                                                        |
+| **`--flash-attn-type 0/1/2`** (v0.2+ of llama.cpp)         | Metal + CUDA now have two flash-attention kernels (`0` ≈ old GEMM, `1` = FMHA, `2` = in-place FMHA).  Some M-series Macs get +5-8 % with type 2 vs 1.                                                                                                         | `[0,1,2]` —but **only if llama.cpp commit ≥ May 2025**.                                                                    | Add a version guard: skip the flag on older builds.                                                                                      |
+
+
+
 
 ---
 
