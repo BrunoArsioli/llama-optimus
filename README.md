@@ -2,7 +2,7 @@
 
 > **Running Local AI?**
 >
-> **Maximize your token/s for prompt processing (pp) & token generation (tg)**
+> **Maximize your tokens/s for prompt processing (pp) & token generation (tg)**
 >
 > llama-optimus is a lightweight Python tool to automatically optimize `llama.cpp` performance flags for maximum throughput.
 >

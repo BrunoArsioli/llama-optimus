@@ -1,5 +1,4 @@
 name: CI
-# ensures every push/pr runs all tests automatically
 
 on: [push, pull_request]
 
@@ -11,5 +10,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r requirements.txt pytest
+      - run: pip install --upgrade pip
+      - run: pip install -r requirements.txt
+      - run: pip install .
       - run: pytest --maxfail=1 --disable-warnings -q

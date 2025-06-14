@@ -13,11 +13,11 @@ def main():
         epilog="""
         Example usage:
 
-            python optimus.py --llama-bin my_path_to/llama.cpp/build/bin --model my_path_to/models/my-model.gguf --trials 35 --metric tg
+            llama-optimus --llama-bin my_path_to/llama.cpp/build/bin --model my_path_to/models/my-model.gguf --trials 35 --metric tg
             
         for a quick test (set a single Optuna trial and a single repetition of llama-bench):
             
-            python optimus.py --llama-bin my_path_to/llama.cpp/build/bin --model my_path_to/models/my-model.gguf --trials 1 -r 1 --metric tg
+            llama-optimus --llama-bin my_path_to/llama.cpp/build/bin --model my_path_to/models/my-model.gguf --trials 1 -r 1 --metric tg
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
         )

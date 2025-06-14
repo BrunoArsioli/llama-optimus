@@ -187,23 +187,24 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
     #print("\n# Copy and paste to run llama-server with these optimized settings:\n" + command)
 
     print("\n# You are ready to run a local llama-server:")
+    print("\n# llama-server (inference): listening at http://127.0.0.1:8080/ in your browser.")
 
-    # 1. llama-server (inference); listening at http://127.0.0.1:8080/ in your browser. 
+    # 1. llama-server (inference); will be listening at http://127.0.0.1:8080/ in your browser. 
     llama_server_cmd = (
-        f"{llama_bin_path}/llama-server --model {model_path}"
+        f"/path_to/llama-server --model /path_to_model.gguf"
         f" -t {best['threads']}"
         f" --batch-size {best['batch']}"
         f" --ubatch-size {best['u_batch']}"
         f" -ngl {best['gpu_layers']}"
         f" --flash-attn {best['flash']}"
     )
-    print("\n# For optimal inference:")
-    print(llama_server_cmd)
+    print("\n# For optimal inference, run:")
+    print(f"\n {llama_server_cmd}")
 
     # 2. llama-bench (benchmark for both tg and pp)
     llama_bench_cmd = (
-        f"{llama_bench_path}"
-        f" --model {model_path}"
+        f"/path_to/llama-bench"
+        f" --model path_to_model.gguf"
         f" -t {best['threads']}"
         f" --batch-size {best['batch']}"
         f" --ubatch-size {best['u_batch']}"
@@ -212,5 +213,5 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
         f" -n 128 -p 128 -r 3 -o csv"
     )
     print("\n# To benchmark both generation and prompt processing speeds:")
-    print(llama_bench_cmd)
+    print(f"\n{llama_bench_cmd}")
 
