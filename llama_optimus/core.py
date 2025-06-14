@@ -16,10 +16,10 @@ max_threads = os.cpu_count()
 SEARCH_SPACE = {
     #'m_map': [0,1],          # Enable memory mapping when models are loaded (default:0)
     'flash_attn': [0,1],     #  --flash-attn <0|1>  ; Enables flash attention       
-    'gpu_layers': {'low': 0, 'high': 99},          # (-ngl) Set max to model + VRAM; The max value must be found first
+    'gpu_layers': {'low': 0, 'high': 199},          # (-ngl) Set max to model + VRAM; The max value must be found first
     'threads':    {'low': 1, 'high': max_threads},  # Adjust range to your hardware
-    'ubatch_size'    : [16, 32, 64, 128, 256, 512, 1024, 2048, 4096], #  
-    'batch_size'     : [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]  # select number from list
+    'ubatch_size'    : [8, 16, 24, 32, 48, 64, 96, 128, 182, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192], #  
+    'batch_size'     : [8, 16, 24, 32, 48, 64, 96, 128, 182, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288 , 16384]  # select number from list
 }
 
 # estimate max value for number of layers; ngl 
