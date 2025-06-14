@@ -52,7 +52,7 @@
 
 1. **Clone this repo:**
     ```bash
-    git clone https://github.com/YOUR-USERNAME/llama-optimus.git
+    git clone https://github.com/BrunoArsioli/llama-optimus
     cd llama-optimus
     ```
 
