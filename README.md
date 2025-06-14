@@ -24,19 +24,14 @@
 
 ## What does llama-optimus do?
 
-- **Benchmarks and tunes** `llama.cpp` models for maximum `tokens/sec`, using automated parameter search.
-- **Optimizes for token generation, prompt processing, or both.**
+- **Tunes** `llama.cpp` parameters for maximum `tokens/sec`, using automated parameter search.
+- **Bayesian optimization** (Optuna) is used to maximize tokens/sec for prompt processing, generation or both
 - **Estimates or accepts user-specified GPU layer count (`-ngl`).**
 - **CLI interface:** All major parameters and paths are settable via command line or environment variable.
 - **Built on:** [Optuna](https://optuna.org/) for hyperparameter optimization and [llama.cpp](https://github.com/ggerganov/llama.cpp) for inference.
-
-## Features
-- **Bayesian optimization** (Optuna) to maximize tokens/sec for prompt processing or generation
-- Easily adapts to Apple Silicon, Linux x86, and NVIDIA GPU systems
-- CLI for seamless integration in scripts or interactive exploration
+- Adapts to Apple Silicon, Linux x86, and NVIDIA GPU systems
 - Outputs copy-paste-ready commands for `llama-server` and `llama-bench`
 - Quick/robust benchmarks (controlable via `-r` flag)
-- Fail-safe: avoids failed internal trials (via pre-accessment of the maxmum number of layers that can be passed to your GPU RAM)
 
 ---
 
@@ -74,7 +69,7 @@
 
 4. **Build llama.cpp:**
     - Follow the [llama.cpp instructions](https://github.com/ggerganov/llama.cpp#build).
-    - Note your full path to `llama-bin` (e.g., `/your/path/llama.cpp/build/bin`) for this tool to work.
+    - Note your full path to `llama-bin` (e.g., `/your_path_to/llama.cpp/build/bin`) for this tool to work.
 
 ---
 
@@ -85,8 +80,8 @@
 
 ### Option A: **Set as environment variables**
 ```bash
-export LLAMA_BIN=/path/to/llama.cpp/build/bin
-export MODEL_PATH=/path/to/model.gguf
+export LLAMA_BIN=/path_to/llama.cpp/build/bin
+export MODEL_PATH=/path_to/model.gguf
 python src/optimus.py
 ```
 
@@ -94,6 +89,27 @@ then you only need:
 ```bash
 llama-optimus
 ```
+
+for a robust test, you can use more trials (default: 45), and more benchmark repetitions (default: 2)
+```bash
+llama-optimus --trials 70 -r 5 
+```
+### Quick Notes/FAQ:
+What is a **trial**? It is a test of the model performance (e.g. how many tokens/s it can generate) given a configuration of llama.cpp paramters.
+
+e.g.: When running `llama-optimus` you will see the output for every trial, like this: 
+
+Trial 0 finished with value: 72.43 and parameters: {'batch': 32, 'flash': 1, 'u_batch': 8, 'threads': 11, 'gpu_layers': 97}. Best is trial 0 with value: 72.43 
+
+Meaning, if you run a llama-server with flags: --batchh-size 32 --flash-attn 1 --ubatch-size 8 --threads 11 -ngl 97 ; you will get about 72.43 tokens/s in token generation. 
+
+What is a **repetition** or `-r` ?
+
+The result we got from Trial 0 (**72.43 tokens/s**) is a mean value; It was calculated by running this same **Trial 0** configuration `-r` times. 
+
+Why do we need to **repeat** runs before calculating the result (tokens/s) ?
+
+That is because, everytime you run `llama-bench` (the llama.cpp benchmark) you get a sligtly diferent estimate for the tokens/s metric. There is a degree of variability in the results; We calculate a mean value to base our final decision on more reliable/robust results.  
 
 ### Option B: Pass as CLI flags
 
@@ -114,8 +130,9 @@ and `source set_local_paths.sh` before running `llama-optimus`.
 
 ## Usage
 
+run llama-optimus with 25 trials, 3 repetitions per trial, and only estimate token generation **tg** velocity: 
 ```bash
-llama-optimus --llama-bin my_path_to/llama.cpp/build/bin --model my_path_to/model.gguf --trials 25 --metric tg
+llama-optimus --llama-bin my_path_to/llama.cpp/build/bin --model my_path_to/model.gguf --trials 25 -r 3 --metric tg
 ```
 
 Or, if you prefer to use environment variables :
@@ -147,6 +164,8 @@ llama-optimus --help
 
 ## How it works
 
+- By default, starts by estimating your hardware's max `-ngl` (GPU layers) for a given model. If you know your max, use `--ngl-max` to skip this step.
+
 - Uses Optuna to search for the best combination of `llama.cpp` flags (batch size, ubatch, threads, ngl, etc).
 
 - Runs quick benchmarks (with `llama-bench`) for each config, parses results from the CSV, and feeds back to the optimizer.
@@ -154,6 +173,8 @@ llama-optimus --help
 - Finds the best flags in minutes —no need to try random combinations!
 
 - Handles errors (non-working configs are skipped).
+
+- You can **abort Trial** at any time, and still follow the best result/configuration achieved so far. 
 
 ---
 
@@ -183,12 +204,6 @@ llama-bench --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1
 
 ---
 
-## How it works
-
-- By default, estimates your hardware's max `-ngl` (GPU layers). If you know your max, use `--ngl-max` to skip this step.
-- Explores batch size, threads, microbatch, flash attention, and more, to maximize your chosen throughput metric.
-
----
 ## Tip 
 
 The default values for prompt proccessing `-p 40` and prompt generation `-n 40` gives fast trials.
