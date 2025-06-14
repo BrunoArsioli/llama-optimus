@@ -214,10 +214,11 @@ llama-bench ... -p 512 -n 128 -r 5 -o csv
 ```bash
 llama-optimus/
 │
-├── llama_optimus/
-│   ├── __init__.py
-│   ├── core.py      # all optimization/benchmark logic
-│   └── cli.py       # CLI interface (argparse, entrypoint)
+├── src/
+│    └── llama_optimus/
+│           ├── __init__.py
+│           ├── core.py   # all optimization/benchmark logic
+│           └── cli.py    # CLI interface (argparse, entrypoint)
 │
 ├── test/
 │   └── test_core.py

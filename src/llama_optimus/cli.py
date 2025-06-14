@@ -4,6 +4,8 @@
 import argparse, os, sys
 from .core import run_optimization, estimate_max_ngl, SEARCH_SPACE
 
+from llama_optimus import __version__
+
 # count number of available cpu cores
 max_threads = os.cpu_count()
 
@@ -27,7 +29,8 @@ def main():
     parser.add_argument("--metric", type=str, default="tg", choices=["tg", "pp", "mean"], help="Which throughput metric to optimize: 'tg' (token generation, default), 'pp' (prompt processing), or 'mean' (average of both)")
     parser.add_argument("--ngl-max",type=int, help="Maximum number of model layers for -ngl (skip estimation if provided; estimation runs by default).")
     parser.add_argument("--repeat", "-r", type=int, default=2, help="Number of llama-bench runs per configuration (higher = more robust, lower = faster; default: 2, for quick assessement: 1)")
-    parser.add_argument('--version', "-v", action='version', version='llama-optimus v0.1.0')
+    #parser.add_argument('--version', "-v", action='version', version='llama-optimus v0.1.0')
+    parser.add_argument('--version', "-v", action='version', version=f'llama-optimus v{__version__}')
     args = parser.parse_args()
 
     # Set paths based on CLI flags or env vars

@@ -7,15 +7,33 @@ name = "llama-optimus"
 version = "0.1.1"
 description = "Automatic optimization of llama.cpp inference flags using Bayesian optimization (Optuna)"
 authors = [
-  { name="Bruno Arsioli", email="YOUR_EMAIL@example.com" }
+  { name = "Bruno Arsioli", email = "YOUR_EMAIL@yourdomain.com" }
 ]
 readme = "README.md"
-license = { file = "LICENSE" }
+license = { text = "MIT" }
 requires-python = ">=3.8"
 dependencies = [
   "optuna>=3.0",
   "pandas"
 ]
+keywords = ["llama.cpp", "optimization", "AI", "Optuna", "performance"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/BrunoArsioli/llama-optimus"
+Repository = "https://github.com/BrunoArsioli/llama-optimus"
+"Bug Tracker" = "https://github.com/BrunoArsioli/llama-optimus/issues"
 
 [project.scripts]
 llama-optimus = "llama_optimus.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+
+
+

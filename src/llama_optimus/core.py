@@ -86,7 +86,7 @@ def run_llama_bench_with_csv(cmd, metric):
         raise RuntimeError(result.stderr)
     
     # for debug 
-    print(result.stdout)
+    #print(result.stdout)
 
     # Save stdout to a temp CSV file
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w") as csvfile:
