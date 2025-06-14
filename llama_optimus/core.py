@@ -16,8 +16,8 @@ max_threads = os.cpu_count()
 SEARCH_SPACE = {
     'm_map': [1],             # Fixed; Enable memory mapping (0 = load fully, 1 = mmap)
     'flash_attn': [0,1],      #  --flash-attn <0|1> ; Enables flash attention       
-    'flash_attn_type': [0, 1, 2], # new, version-gated
-    'gpu_layers': {'low': 0, 'high': 199},          # (-ngl) Set max to model + VRAM; The max value must be found first
+    #'flash_attn_type': [0, 1, 2], # not yet merged to main llama.cpp
+    'gpu_layers': {'low': 0, 'high': 149},          # (-ngl) Set max to model + VRAM; The max value must be found first
     'threads':    {'low': 1, 'high': max_threads},  # Adjust range to your hardware
     'ubatch_size'    : [4, 8, 16, 24, 32, 48, 64, 96, 128, 182, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192], #  
     'batch_size'     : [8, 16, 24, 32, 48, 64, 96, 128, 182, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288 , 16384]  # select number from list
@@ -127,16 +127,16 @@ def objective(trial, metric, repeat, llama_bench_path, model_path):
     # Sample params
     batch      = trial.suggest_categorical('batch', SEARCH_SPACE['batch_size'])
     flash      = trial.suggest_categorical('flash', SEARCH_SPACE['flash_attn'])
-    flash_type = trial.suggest_categorical('flash_type', SEARCH_SPACE['flash_attn_type'])
+    #flash_type = trial.suggest_categorical('flash_type', SEARCH_SPACE['flash_attn_type'])
     u_batch    = trial.suggest_categorical('u_batch', SEARCH_SPACE['ubatch_size'])
     threads    = trial.suggest_int('threads', SEARCH_SPACE['threads']['low'], SEARCH_SPACE['threads']['high'])
     gpu_layers = trial.suggest_int('gpu_layers', SEARCH_SPACE['gpu_layers']['low'], SEARCH_SPACE['gpu_layers']['high'])
 
-    # ----------  constraint check  -------------
+    # ----------  constraint check [under development] -------------
     # llama.cpp usually requires batch_size >= ubatch_size; 
     # most user report lower performance if constrain is violated.  Prune such trials early.
-    if batch < u_batch:
-        raise optuna.TrialPruned()    # skip invalid trial
+    #if batch < u_batch:
+    #    raise optuna.TrialPruned()    # skip invalid trial
 
 
     # Build llama-bench command (can edit to add more flags)
@@ -147,7 +147,7 @@ def objective(trial, metric, repeat, llama_bench_path, model_path):
         "--ubatch-size"    , str(u_batch),    # (-ub flag) (default 512) 
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
         "--flash-attn"     , str(flash),      # enables Flash Attention, a performance optimization during inference. 
-        "--flash-attn-type", str(flash_type), # Metal + CUDA now have two flash-attention kernels (0 ≈ old GEMM, 1 = FMHA, 2 = in-place FMHA). 
+        #"--flash-attn-type", str(flash_type), # Metal + CUDA now have two flash-attention kernels (0 ≈ old GEMM, 1 = FMHA, 2 = in-place FMHA). 
         "--model"          , model_path,      # <--- change this or parametrize
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
         "-o"               , "csv"            # save temporary .csv file with llama-bench outputs
@@ -206,6 +206,7 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
         f" --ubatch-size {best['u_batch']}"
         f" -ngl {best['gpu_layers']}"
         f" --flash-attn {best['flash']}"
+        #f" --flash-attn-type {best['flash_type']}"
     )
     print("\n# For optimal inference, run:")
     print(f"\n {llama_server_cmd}")
@@ -219,6 +220,7 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
         f" --ubatch-size {best['u_batch']}"
         f" -ngl {best['gpu_layers']}"
         f" --flash-attn {best['flash']}"
+        #f" --flash-attn-type {best['flash_type']}"
         f" -n 128 -p 128 -r 3 -o csv"
     )
     print("\n# To benchmark both generation and prompt processing speeds:")
