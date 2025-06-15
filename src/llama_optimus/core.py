@@ -309,12 +309,18 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
 
 
     # TRIALS : stage_2
+    if override_mode == "scan": 
+        n_override = len(OVERRIDE_PATTERNS)
+        n_trials_2 = n_override * 2  # to cover all possibilities, since flash_attn: <0|1>
+    else:
+        n_trials_2 = 2 # since flash_attn: <0|1> 
+
     sampler = TPESampler()  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
     study_2 = optuna.create_study(direction="maximize", sampler=sampler)
     # use lambda to inject metric, repeat ...  
     study_2.optimize(lambda trial: objective_2(trial, metric, repeat, llama_bench_path, model_path, 
                                                best_1['override_mode'], best_1['batch'], best_1['u_batch'], 
-                                               best_1['threads'], best_1['gpu_layers']), n_trials=n_trials)
+                                               best_1['threads'], best_1['gpu_layers']), n_trials=n_trials_2)
     print("Best config Stage_2:", study_2.best_trial.params)
     print(f"Best Stage_2 {metric} tokens/sec:", study_2.best_value)
 
