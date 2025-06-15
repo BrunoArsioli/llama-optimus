@@ -17,14 +17,16 @@ max_threads = os.cpu_count()
 
 # [TBD] move to search_space.py 
 SEARCH_SPACE = {
-    #'m_map': [1],             # Fixed; Enable memory mapping (0 = load fully, 1 = mmap)
-    'flash_attn': [0,1],      #  --flash-attn <0|1> ; Enables flash attention       
-    #'flash_attn_type': [0, 1, 2], # not yet merged to main llama.cpp
-    'gpu_layers': {'low': 0, 'high': 149},          # (-ngl) Set max to model + VRAM; The max value must be found first
+    'batch_size'     : {'low': 8, 'high': 16384},   # 
+    'ubatch_size'    : {'low': 4, 'high': 8192},    #  
     'threads':    {'low': 1, 'high': max_threads},  # Adjust range to your hardware
+    'gpu_layers': {'low': 0, 'high': 149},          # (-ngl) Set max to model + VRAM; The max value must be found first
+    'flash_attn': [0,1],                            #  --flash-attn <0|1> ; Enables flash attention       
+    'override_spc'   : list(OVERRIDE_PATTERNS.keys())  # read list from src/llama_optimus/override_patterns.py
+    #'m_map': [1],             # Fixed; Enable memory mapping (0 = load fully, 1 = mmap)
     #'ubatch_size'    : [4, 8, 16, 24, 32, 48, 64, 96, 128, 182, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192], #  
     #'batch_size'     : [8, 16, 24, 32, 48, 64, 96, 128, 182, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288 , 16384],  # select number from list
-    'override_spc'   : list(OVERRIDE_PATTERNS.keys())  # read list from src/llama_optimus/override_patterns.py
+    #'flash_attn_type': [0, 1, 2], # not yet merged to main llama.cpp
 }
 
 
@@ -310,7 +312,9 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
     sampler = TPESampler()  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
     study_2 = optuna.create_study(direction="maximize", sampler=sampler)
     # use lambda to inject metric, repeat ...  
-    study_2.optimize(lambda trial: objective_2(trial, metric, repeat, llama_bench_path, model_path), n_trials=n_trials)
+    study_2.optimize(lambda trial: objective_2(trial, metric, repeat, llama_bench_path, model_path, 
+                                               best_1['override_mode'], best_1['batch'], best_1['u_batch'], 
+                                               best_1['threads'], best_1['gpu_layers']), n_trials=n_trials)
     print("Best config Stage_2:", study_2.best_trial.params)
     print(f"Best Stage_2 {metric} tokens/sec:", study_2.best_value)
 
@@ -320,20 +324,17 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
 
     # TRIALS : stage_3
     sampler = TPESampler(multivariate=True)  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
-    study_1 = optuna.create_study(direction="maximize", sampler=sampler)
+    study_3 = optuna.create_study(direction="maximize", sampler=sampler)
     # use lambda to inject metric, repeat ...  
-    study_1.optimize(lambda trial: objective_1(trial, metric, repeat, llama_bench_path, model_path), n_trials=n_trials)
-    print("Best config Stage_1:", study_1.best_trial.params)
-    print(f"Best Stage_1 {metric} tokens/sec:", study_1.best_value)
+    study_3.optimize(lambda trial: objective_3(trial, metric, repeat, llama_bench_path, model_path, 
+                                               best_2['override_tensor'], best_2['flash_attn']), n_trials=n_trials)
+    print("Best config Stage_3:", study_3.best_trial.params)
+    print(f"Best Stage_3 {metric} tokens/sec:", study_3.best_value)
 
     # output_1 best llama.cpp parameters for Trials stage_1
-    best_1 = study_1.best_trial.params
+    best_3 = study_3.best_trial.params
 
-
-
-
-
-
+    ### END OF TRIALS ###
 
     print("\n# You are ready to run a local llama-server:")
     print("\n# llama-server (inference): listening at http://127.0.0.1:8080/ in your browser.")
@@ -341,11 +342,12 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
     # 1. llama-server (inference); will be listening at http://127.0.0.1:8080/ in your browser. 
     llama_server_cmd = (
         f"/path_to/llama-server --model /path_to_model.gguf"
-        f" -t {best['threads']}"
-        f" --batch-size {best['batch']}"
-        f" --ubatch-size {best['u_batch']}"
-        f" -ngl {best['gpu_layers']}"
-        f" --flash-attn {best['flash']}"
+        f" -t {best_3['threads']}"
+        f" --batch-size {best_3['batch']}"
+        f" --ubatch-size {best_3['u_batch']}"
+        f" -ngl {best_3['gpu_layers']}"
+        f" --flash-attn {best_2['flash']}"
+        f" --override-tensor" {best_2['override_tensor']}
         #f" --flash-attn-type {best['flash_type']}"
     )
     print("\n# For optimal inference, run:")
@@ -355,12 +357,12 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
     llama_bench_cmd = (
         f"/path_to/llama-bench"
         f" --model path_to_model.gguf"
-        f" -t {best['threads']}"
-        f" --batch-size {best['batch']}"
-        f" --ubatch-size {best['u_batch']}"
-        f" -ngl {best['gpu_layers']}"
-        f" --flash-attn {best['flash']}"
-        #f" --flash-attn-type {best['flash_type']}"
+        f" -t {best_3['threads']}"
+        f" --batch-size {best_3['batch']}"
+        f" --ubatch-size {best_3['u_batch']}"
+        f" -ngl {best_3['gpu_layers']}"
+        f" --flash-attn {best_2['flash']}"
+        f" --override-tensor" {best_2['override_tensor']}
         f" -n 128 -p 128 -r 3 -o csv"
     )
     print("\n# To benchmark both generation and prompt processing speeds:")
