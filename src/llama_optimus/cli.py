@@ -3,6 +3,7 @@
 
 import argparse, os, sys
 from .core import run_optimization, estimate_max_ngl, SEARCH_SPACE
+from .override_patterns import OVERRIDE_PATTERNS   
 
 from llama_optimus import __version__
 
@@ -30,7 +31,12 @@ def main():
     parser.add_argument("--ngl-max",type=int, help="Maximum number of model layers for -ngl (skip estimation if provided; estimation runs by default).")
     parser.add_argument("--repeat", "-r", type=int, default=2, help="Number of llama-bench runs per configuration (higher = more robust, lower = faster; default: 2, for quick assessement: 1)")
     #parser.add_argument('--version', "-v", action='version', version='llama-optimus v0.1.0')
-    parser.add_argument('--version', "-v", action='version', version=f'llama-optimus v{__version__}')
+    parser.add_argument("--version", "-v", action='version', version=f'llama-optimus v{__version__}')
+
+    parser.add_argument("--override-mode", type=str, default="none", choices=["none", "scan", "custom"],
+    help=f"'none': do not scan this parameter; scan: 'scan' over preset override-tensor patterns; " \
+    f"'custom': (future) user provides their own pattern(s). Available override patterns: {OVERRIDE_PATTERNS.keys()}" )
+    
     args = parser.parse_args()
 
     # Set paths based on CLI flags or env vars
@@ -62,9 +68,10 @@ def main():
             min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high'])
         print(f"Setting maximum -ngl to {SEARCH_SPACE['gpu_layers']['high']}")
 
+
     run_optimization(n_trials=args.trials, metric=args.metric, 
                      repeat=args.repeat, llama_bench_path=llama_bench_path, 
-                     model_path=model_path, llama_bin_path=llama_bin_path)  
+                     model_path=model_path, llama_bin_path=llama_bin_path, override_mode=args.override_mode)  
 
 if __name__ == "__main__":
 
