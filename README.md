@@ -18,7 +18,7 @@
 
 
 <p align="center">
-    <img src="assets/llama.optimus_llama_optuna_logo.png" width="600">
+    <img src="assets/llama.optimus_logo_PyPi_Optuna_Llama.png" width="600">
 </p>
 
 
@@ -315,6 +315,13 @@ MIT License (see LICENSE).
 **llama.optimus**
 <p align="left"><img src="assets/llama.optimus_logo.png" width="500"></p>
 - [llama.optimus](https://github.com/BrunoArsioli/llama-optimus)
+
+<br>
+
+**PyPi**
+
+<p align="left"><img src="assets/logo-PyPi.svg" width="500"></p>
+- [PyPi](https://pypi.org/)
 
 ---
 

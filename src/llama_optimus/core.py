@@ -8,6 +8,8 @@ import os
 import shutil
 import pandas as pd 
 import tempfile
+from optuna.samplers import TPESampler
+
 
 # count number of available cpu cores
 max_threads = os.cpu_count()
@@ -183,8 +185,8 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
     Returns:
         None
     """
-
-    study = optuna.create_study(direction="maximize")
+    sampler = TPESampler()  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
+    study = optuna.create_study(direction="maximize", sampler=sampler)
     # use lambda to inject metric 
     study.optimize(lambda trial: objective(trial, metric, repeat, llama_bench_path, model_path), n_trials=n_trials)
     print("Best config:", study.best_trial.params)
