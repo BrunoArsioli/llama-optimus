@@ -194,10 +194,6 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
     print(f"Running objective_2 with batch={batch}, u_batch={u_batch}, threads={threads}, gpu_layers={gpu_layers}")
 
 
-    # Sample params
-    flash_attn   = trial.suggest_categorical('flash_attn', SEARCH_SPACE['flash_attn'])
-    #flash_type  = trial.suggest_categorical('flash_type', SEARCH_SPACE['flash_attn_type'])
-
     # Build llama-bench command (can edit to add more flags)
     cmd_2 = [
         llama_bench_path, # path to your llama-bench binary
@@ -205,7 +201,7 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         "--ubatch-size"    , str(u_batch),    # (-ub flag) (default 512) 
         "--threads"        , str(threads),    # (-t  flag) (default 2)  
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
-        "--flash-attn"     , str(flash_attn), # enables Flash Attention, a performance optimization during inference. 
+        #"--flash-attn"     , str(flash_attn), # enables Flash Attention, a performance optimization during inference. 
         #"--flash-attn-type", str(flash_type),# Metal + CUDA now have two flash-attention kernels (0 ≈ old GEMM, 1 = FMHA, 2 = in-place FMHA). 
         "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
@@ -221,13 +217,31 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
     if metric in ("pp", "mean"):
         cmd_2 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
 
+
+    # remove flash-attn flag in case --flash-attn is 0
+    flash_attn   = trial.suggest_categorical('flash_attn', SEARCH_SPACE['flash_attn'])
+    if flash_attn == 1:  # in case of "0" option, do not pass the --flash-attn flag 
+        cmd_2 += ["--flash-attn", str(flash_attn)] # test few configuration[TBD]maybe run after last optimization  
+
+    #flash_type  = trial.suggest_categorical('flash_type', SEARCH_SPACE['flash_attn_type'])
+
     # include trials over --override-tensor only if "scan" is passes to args.override_tensor
+    # and, in case override_key == "none", the override-tensor flag is not inserted in cmd_2
     if override_mode == "scan":
         override_key = trial.suggest_categorical('override_tensor', list(OVERRIDE_PATTERNS.keys()))
         if override_key != "none":  # in case of "none" option, do not pass the no --override-tensor flag 
             cmd_2 += ["--override-tensor", OVERRIDE_PATTERNS[override_key]] # test few configuration[TBD]maybe run after last optimization  
 
-    print(f"cmd_2: {cmd_2}")
+    # whe we need the last two? It seems llama.cpp is treating --flash-attn 0 and --override-tensor ""
+    # in different way it treats cases where those flags are simply not given.
+    # [TBD] we must investigate this
+    # for now, set these rules to guarantee a case with no flags is tried as well 
+
+    # debug 
+    print("")
+    print(f"cmd_2: {cmd_2} ")
+    print("")
+    
     try:
         tokens_per_sec = run_llama_bench_with_csv(cmd_2, metric)
         return tokens_per_sec    
@@ -345,6 +359,16 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
 
     # output_1 best llama.cpp parameters for Trials stage_1
     best_2 = study_2.best_trial.params
+
+    #degug
+    print(f"best_2 list: {best_2}")
+
+    # in case --override-tensor none, pass ""
+    if 'override_tensor' not in best_2:
+        best_2['override_tensor'] = ""
+
+    # debug
+    print(f"best_2 list after appending: {best_2}")
 
 
     # TRIALS : stage_3

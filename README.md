@@ -165,6 +165,8 @@ llama-optimus --help
 
 ## How it works
 
+- By default, starts with a warm-up (check why a warm up is needed)
+
 - By default, starts by estimating your hardware's max `-ngl` (GPU layers) for a given model. If you know your max, use `--ngl-max` to skip this step.
 
 - Uses Optuna to search for the best combination of `llama.cpp` flags (batch size, ubatch, threads, ngl, etc).
@@ -207,16 +209,32 @@ llama-bench --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1
 
 ## Tip 
 
-The default values for prompt proccessing `-p 40` and prompt generation `-n 40` gives fast trials.
+The default values for prompt proccessing `-p 50` and prompt generation `-n 50` gives fast trials.
 
-[**TBD**] add option for user control of -p and -n value in trials.
+The user can control this via `--n-tokens` parameter, which can be passed to llama-optimus during launch: lead to stable and robust results 
 
-For a more stable final score, re-run llama-bench with the best flags found:
+```bash
+llama-optimus --n-tokens 128
+```
+
+Later, for a stable final score, re-run llama-bench with the best flags found (dont'forget to warm-up first):
 ```bash
 llama-bench ... -p 512 -n 128 -r 5 -o csv
 ```
 
 ---
+
+## Why Do a Warmup?
+
+Initial runs are fast because hardware (especially Apple Silicon) is “cold”—no thermal throttling, RAM/cache is fresh, and CPU governor may be in turbo mode.
+
+After several runs, temperature rises or RAM usage accumulates, causing the system to reduce clocks or evict caches.
+
+If you start Trials (Stage 1 or 2) with “cold” hardware, the “best” config may just be lucky—chosen in a period of turbo clocks, giving misleading results.
+
+For this reason, llama-optimus warms-up before scaning the parameter space with its Bayesian TPESampler. 
+
+
 ## 🛟 Troubleshooting 🛟
 
 - **`llama-bench not found`**: Check your `--llama-bin` path or `LLAMA_BIN` env var.
