@@ -9,6 +9,7 @@ import shutil
 import pandas as pd 
 import tempfile
 from optuna.samplers import TPESampler
+from optuna.samplers import GridSampler
 from .override_patterns import OVERRIDE_PATTERNS   
 
 
@@ -119,21 +120,22 @@ def run_llama_bench_with_csv(cmd, metric):
     return metric_value
 
 
-def objective_1(trial, metric, repeat, llama_bench_path, model_path):
+def objective_1(trial, n_tokens, metric, repeat, llama_bench_path, model_path):
     """
     Objective function for Optuna optimization. Samples a set of performance parameters,
     builds the llama-bench command, runs the benchmark, and returns the throughput metric.
 
     Parameters:
         trial (optuna.trial.Trial): The current Optuna trial object.
+        n_tokens (int): the number of tokens used in pp and tg benchmark 
         metric (str): The performance metric to optimize ("tg", "pp", or "mean").
         repeat (int): Number of llama-bench repetitions for every trial; used to calculate robust <token/s> value
     Returns:
         float: The throughput value to maximize (tokens/sec).
     """
     # Sample params
-    batch        = trial.suggest_int('batch', SEARCH_SPACE['batch_size']['low'], SEARCH_SPACE['high'])
-    u_batch      = trial.suggest_int('u_batch', SEARCH_SPACE['ubatch_size']['low'], SEARCH_SPACE['high'])
+    batch        = trial.suggest_int('batch', SEARCH_SPACE['batch_size']['low'], SEARCH_SPACE['batch_size']['high'])
+    u_batch      = trial.suggest_int('u_batch', SEARCH_SPACE['ubatch_size']['low'], SEARCH_SPACE['ubatch_size']['high'])
     threads      = trial.suggest_int('threads', SEARCH_SPACE['threads']['low'], SEARCH_SPACE['threads']['high'])
     gpu_layers   = trial.suggest_int('gpu_layers', SEARCH_SPACE['gpu_layers']['low'], SEARCH_SPACE['gpu_layers']['high'])
 
@@ -145,14 +147,13 @@ def objective_1(trial, metric, repeat, llama_bench_path, model_path):
 
 
     # Build llama-bench command 
-    cmd = [
+    cmd_1 = [
         llama_bench_path, # path to your llama-bench binary
         "--batch-size"     , str(batch),      # (-b  flag) (default 2024)
         "--ubatch-size"    , str(u_batch),    # (-ub flag) (default 512) 
         "--threads"        , str(threads),    # (-t  flag) (default 2)  
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
-        "--flash-attn"     , str(flash),      # enables Flash Attention, a performance optimization during inference. 
-        "--model"          , model_path,      # <--- change this or parametrize
+        "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
         "-o"               , "csv"            # save temporary .csv file with llama-bench outputs
     ]
@@ -161,12 +162,15 @@ def objective_1(trial, metric, repeat, llama_bench_path, model_path):
 
     # Add task-specific flags
     if metric in ("tg", "mean"):
-        cmd += ["-n", "10"]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
+        cmd_1 += ["-n", str(n_tokens)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
     if metric in ("pp", "mean"):
-        cmd += ["-p", "10"]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
+        cmd_1 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
 
+    # debug
+    print(f"cmd_1: {cmd_1}")
+    
     try:
-        tokens_per_sec = run_llama_bench_with_csv(cmd, metric)
+        tokens_per_sec = run_llama_bench_with_csv(cmd_1, metric)
         return tokens_per_sec    
     except Exception as e:
         print(f"Error: {e}")
@@ -175,7 +179,7 @@ def objective_1(trial, metric, repeat, llama_bench_path, model_path):
     # i.e. this trial will be considered a failure but not fatal.
 
 
-def objective_2(trial, metric, repeat, llama_bench_path, model_path, override_mode, batch, u_batch, threads, gpu_layers):
+def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, override_mode, batch, u_batch, threads, gpu_layers):
     """
     Objective function for Optuna scan over the entire categorical parameter space
 
@@ -186,20 +190,24 @@ def objective_2(trial, metric, repeat, llama_bench_path, model_path, override_mo
     Returns:
         float: The throughput value to maximize (tokens/sec).
     """
+    # for degug
+    print(f"Running objective_2 with batch={batch}, u_batch={u_batch}, threads={threads}, gpu_layers={gpu_layers}")
+
+
     # Sample params
-    flash        = trial.suggest_categorical('flash', SEARCH_SPACE['flash_attn'])
+    flash_attn   = trial.suggest_categorical('flash_attn', SEARCH_SPACE['flash_attn'])
     #flash_type  = trial.suggest_categorical('flash_type', SEARCH_SPACE['flash_attn_type'])
 
     # Build llama-bench command (can edit to add more flags)
-    cmd = [
+    cmd_2 = [
         llama_bench_path, # path to your llama-bench binary
         "--batch-size"     , str(batch),      # (-b flag) (default 2024)
         "--ubatch-size"    , str(u_batch),    # (-ub flag) (default 512) 
-        "-threads"         , str(threads),    # (-t  flag) (default 2)  
+        "--threads"        , str(threads),    # (-t  flag) (default 2)  
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
-        "--flash-attn"     , str(flash),      # enables Flash Attention, a performance optimization during inference. 
-        #"--flash-attn-type", str(flash_type), # Metal + CUDA now have two flash-attention kernels (0 ≈ old GEMM, 1 = FMHA, 2 = in-place FMHA). 
-        "--model"          , model_path,      # <--- change this or parametrize
+        "--flash-attn"     , str(flash_attn), # enables Flash Attention, a performance optimization during inference. 
+        #"--flash-attn-type", str(flash_type),# Metal + CUDA now have two flash-attention kernels (0 ≈ old GEMM, 1 = FMHA, 2 = in-place FMHA). 
+        "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
         "-o"               , "csv"            # save temporary .csv file with llama-bench outputs
     ]
@@ -209,25 +217,26 @@ def objective_2(trial, metric, repeat, llama_bench_path, model_path, override_mo
 
     # Add task-specific flags
     if metric in ("tg", "mean"):
-        cmd += ["-n", "10"]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
+        cmd_2 += ["-n", str(n_tokens)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
     if metric in ("pp", "mean"):
-        cmd += ["-p", "10"]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
+        cmd_2 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
 
     # include trials over --override-tensor only if "scan" is passes to args.override_tensor
     if override_mode == "scan":
-        override_key = trial.suggest_categorical('override_pattern', list(OVERRIDE_PATTERNS.keys()))
-        cmd += ["--override-tensor", OVERRIDE_PATTERNS[override_key]] # test few configuration[TBD]maybe run after last optimization  
+        override_key = trial.suggest_categorical('override_tensor', list(OVERRIDE_PATTERNS.keys()))
+        if override_key != "none":  # in case of "none" option, do not pass the no --override-tensor flag 
+            cmd_2 += ["--override-tensor", OVERRIDE_PATTERNS[override_key]] # test few configuration[TBD]maybe run after last optimization  
 
-
+    print(f"cmd_2: {cmd_2}")
     try:
-        tokens_per_sec = run_llama_bench_with_csv(cmd, metric)
+        tokens_per_sec = run_llama_bench_with_csv(cmd_2, metric)
         return tokens_per_sec    
     except Exception as e:
         print(f"Error: {e}")
         return 0.0
 
 
-def objective_3(trial, metric, repeat, llama_bench_path, model_path, override_tensor, flash_attn):
+def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, override_pattern, flash_attn):
     """
     Objective function for Optuna optimization. 
     After we select promising '--override-tensor' and '--flash-attn'
@@ -244,40 +253,43 @@ def objective_3(trial, metric, repeat, llama_bench_path, model_path, override_te
         float: The throughput value to maximize (tokens/sec).
     """
     # Sample params
-    batch        = trial.suggest_int('batch', SEARCH_SPACE['batch_size']['low'], SEARCH_SPACE['high'])
-    u_batch      = trial.suggest_int('u_batch', SEARCH_SPACE['ubatch_size']['low'], SEARCH_SPACE['high'])
+    batch        = trial.suggest_int('batch', SEARCH_SPACE['batch_size']['low'], SEARCH_SPACE['batch_size']['high'])
+    u_batch      = trial.suggest_int('u_batch', SEARCH_SPACE['ubatch_size']['low'], SEARCH_SPACE['ubatch_size']['high'])
     threads      = trial.suggest_int('threads', SEARCH_SPACE['threads']['low'], SEARCH_SPACE['threads']['high'])
     gpu_layers   = trial.suggest_int('gpu_layers', SEARCH_SPACE['gpu_layers']['low'], SEARCH_SPACE['gpu_layers']['high'])
 
     # Build llama-bench command 
-    cmd = [
+    cmd_3 = [
         llama_bench_path, # path to your llama-bench binary
         "--batch-size"     , str(batch),      # (-b  flag) (default 2024)
         "--ubatch-size"    , str(u_batch),    # (-ub flag) (default 512) 
         "--threads"        , str(threads),    # (-t  flag) (default 2)  
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
         "--flash-attn"     , str(flash_attn), # enables Flash Attention, a performance optimization during inference. 
-        "override-tensor"  , str(overrive_tensor) # enable loading larger tensors to the CPU (saving VRAM from GPU)
-        "--model"          , model_path,      # <--- change this or parametrize
+        "--override-tensor", str(override_pattern),# enable loading larger tensors to the CPU (saving VRAM from GPU)
+        "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
         "-o"               , "csv"            # save temporary .csv file with llama-bench outputs
     ]
 
     # Add task-specific flags
     if metric in ("tg", "mean"):
-        cmd += ["-n", "10"]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
+        cmd_3 += ["-n", str(n_tokens)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
     if metric in ("pp", "mean"):
-        cmd += ["-p", "10"]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
+        cmd_3 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
+
+    # debug
+    print(f"cmd_3: {cmd_3}")
 
     try:
-        tokens_per_sec = run_llama_bench_with_csv(cmd, metric)
+        tokens_per_sec = run_llama_bench_with_csv(cmd_3, metric)
         return tokens_per_sec    
     except Exception as e:
         print(f"Error: {e}")
         return 0.0
 
 
-def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, llama_bin_path, override_mode):  
+def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model_path, llama_bin_path, override_mode):  
     """
     Run the Optuna optimization loop for a given number of trials, using the provided metric.
     At the end, print the best configuration and ready-to-use commands for llama-server/llama-bench.
@@ -293,33 +305,40 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
         ...[TBD]
 
     Returns:
-        None
+        None 
     """
 
     # TRIALS : stage_1
     sampler = TPESampler(multivariate=True)  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
     study_1 = optuna.create_study(direction="maximize", sampler=sampler)
     # use lambda to inject metric, repeat ...  
-    study_1.optimize(lambda trial: objective_1(trial, metric, repeat, llama_bench_path, model_path), n_trials=n_trials)
+    study_1.optimize(lambda trial: objective_1(trial, n_tokens, metric, repeat, llama_bench_path, model_path), n_trials=n_trials)
     print("Best config Stage_1:", study_1.best_trial.params)
     print(f"Best Stage_1 {metric} tokens/sec:", study_1.best_value)
 
     # output_1 best llama.cpp parameters for Trials stage_1
     best_1 = study_1.best_trial.params
+    print("Best config Stage_1:", best_1)
 
 
     # TRIALS : stage_2
     if override_mode == "scan": 
-        n_override = len(OVERRIDE_PATTERNS)
+        n_override = len(OVERRIDE_PATTERNS)  # 
         n_trials_2 = n_override * 2  # to cover all possibilities, since flash_attn: <0|1>
+        
+        # define grid space
+        search2 = {'flash_attn': SEARCH_SPACE['flash_attn'],
+                   'override_tensor': SEARCH_SPACE['override_spc']}    
     else:
         n_trials_2 = 2 # since flash_attn: <0|1> 
+        search2 = {'flash_attn': SEARCH_SPACE['flash_attn']} 
 
-    sampler = TPESampler()  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
-    study_2 = optuna.create_study(direction="maximize", sampler=sampler)
+    # in this case, use grid sampler
+    sampler_2 = optuna.samplers.GridSampler(search2)
+    study_2 = optuna.create_study(direction="maximize", sampler=sampler_2)
     # use lambda to inject metric, repeat ...  
-    study_2.optimize(lambda trial: objective_2(trial, metric, repeat, llama_bench_path, model_path, 
-                                               best_1['override_mode'], best_1['batch'], best_1['u_batch'], 
+    study_2.optimize(lambda trial: objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, 
+                                               override_mode, best_1['batch'], best_1['u_batch'], 
                                                best_1['threads'], best_1['gpu_layers']), n_trials=n_trials_2)
     print("Best config Stage_2:", study_2.best_trial.params)
     print(f"Best Stage_2 {metric} tokens/sec:", study_2.best_value)
@@ -329,10 +348,10 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
 
 
     # TRIALS : stage_3
-    sampler = TPESampler(multivariate=True)  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
-    study_3 = optuna.create_study(direction="maximize", sampler=sampler)
+    sampler_3 = TPESampler(multivariate=True)  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
+    study_3 = optuna.create_study(direction="maximize", sampler=sampler_3)
     # use lambda to inject metric, repeat ...  
-    study_3.optimize(lambda trial: objective_3(trial, metric, repeat, llama_bench_path, model_path, 
+    study_3.optimize(lambda trial: objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, 
                                                best_2['override_tensor'], best_2['flash_attn']), n_trials=n_trials)
     print("Best config Stage_3:", study_3.best_trial.params)
     print(f"Best Stage_3 {metric} tokens/sec:", study_3.best_value)
@@ -347,13 +366,13 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
 
     # 1. llama-server (inference); will be listening at http://127.0.0.1:8080/ in your browser. 
     llama_server_cmd = (
-        f"/path_to/llama-server --model /path_to_model.gguf"
+        f"/path_to/llama-server --model /path_to_model.gguf" 
         f" -t {best_3['threads']}"
         f" --batch-size {best_3['batch']}"
         f" --ubatch-size {best_3['u_batch']}"
         f" -ngl {best_3['gpu_layers']}"
-        f" --flash-attn {best_2['flash']}"
-        f" --override-tensor" {best_2['override_tensor']}
+        f" --flash-attn {best_2['flash_attn']}"
+        f" --override-tensor {best_2['override_tensor']}"
         #f" --flash-attn-type {best['flash_type']}"
     )
     print("\n# For optimal inference, run:")
@@ -367,8 +386,8 @@ def run_optimization(n_trials, metric, repeat, llama_bench_path, model_path, lla
         f" --batch-size {best_3['batch']}"
         f" --ubatch-size {best_3['u_batch']}"
         f" -ngl {best_3['gpu_layers']}"
-        f" --flash-attn {best_2['flash']}"
-        f" --override-tensor" {best_2['override_tensor']}
+        f" --flash-attn {best_2['flash_attn']}"
+        f" --override-tensor {best_2['override_tensor']}"
         f" -n 128 -p 128 -r 3 -o csv"
     )
     print("\n# To benchmark both generation and prompt processing speeds:")

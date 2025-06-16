@@ -20,6 +20,9 @@ Value: the pattern string to pass to --override-tensor.
 # You can add custom patterns as needed for advanced setups.
 
 OVERRIDE_PATTERNS = {
+    # pass no override-tensor flag
+    "none": "",
+
     # Offload **all** expert FFN tensors (max VRAM savings, slowest if you have only CPU for experts)
     "ffn_cpu_all": r"blk\.\d+\.ffn_.*_exps\.=CPU",
 

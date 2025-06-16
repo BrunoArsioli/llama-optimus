@@ -153,6 +153,7 @@ llama-optimus --trials 25 --metric tg
   `pp` = prompt processing speed,
   `mean` = average of both
 * `-r` / `--repeat`   How many repetitions per configuration (default: 2; use 1 for quick/dirty, 5 for robust)
+* `--n-tokens`  Number of tokens to use for benchmarking. Larger = more stable measurements (default: 60).
 
 See all options:
 
