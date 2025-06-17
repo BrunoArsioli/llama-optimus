@@ -29,12 +29,30 @@ def main():
     parser.add_argument("--trials", type=int, default=45, help="Number of Optuna/optimization trials")
     parser.add_argument("--model", type=str, help="Path to model (overrides env var)")
     parser.add_argument("--llama-bin", type=str, help="Path to llama.cpp build/bin folder (overrides env var)")
-    parser.add_argument("--metric", type=str, default="tg", choices=["tg", "pp", "mean"], help="Which throughput metric to optimize: 'tg' (token generation, default), 'pp' (prompt processing), or 'mean' (average of both)")
-    parser.add_argument("--ngl-max",type=int, help="Maximum number of model layers for -ngl (skip estimation if provided; estimation runs by default).")
-    parser.add_argument("--repeat", "-r", type=int, default=2, help="Number of llama-bench runs per configuration (higher = more robust, lower = faster; default: 2, for quick assessement: 1)")
-    parser.add_argument("--n-tokens", type=int, default=60, help="Number of tokens used in llama-bench to test velocity of prompt proccessing and text generation. Keep in mind there is large variability in tok/s outputs. If n_tokens is too low, uncertainty takes over. Try to use n_tokens > 60. For fast exploration: --n-tokens 10 -repeat 2")
-    parser.add_argument("--n-warmup-tokens", "-nwt", type=int, default=128, help="Number of tokens passed to llama-bench during each warmup loop. In case of large models (and you getting small tg tokens/s), if n_warmup_tokens is too large, it can happen that you warmup in the first warmup cycle, and you end up not detecting the warmup.  Keep in mind there is large variability in tok/s outputs. If n_tokens is too low, uncertainty takes over.")
-    parser.add_argument("--no-warmup", action="store_true", help="Skip the initial system warmup phase before optimization (for debugging/testing).")
+
+    parser.add_argument("--metric", type=str, default="tg", choices=["tg", "pp", "mean"], help="Which throughput " \
+        "metric to optimize: 'tg' (token generation, default), 'pp' (prompt processing), or 'mean' (average of both)")
+
+    parser.add_argument("--ngl-max",type=int, help="Maximum number of model layers for -ngl "
+        "(skip estimation if provided; estimation runs by default).")
+
+    parser.add_argument("--repeat", "-r", type=int, default=2, help="Number of llama-bench runs per configuration "
+        "(higher = more robust, lower = faster; default: 2, for quick assessment: 1)")
+
+    parser.add_argument("--n-tokens", type=int, default=128, help="Number of tokens used in llama-bench to test " \
+        "velocity of prompt processing and text generation. Keep in mind there is large variability in tok/s outputs. " \
+        "If n_tokens is too low, uncertainty takes over, optimization may suffer. Still, if you need to lower it, " \
+        "try to operate with n_tokens > 70 and --repeat 3. " \
+        "For fast exploration/testing/debug: --n-tokens 10 --repeat 2 is fine")
+    
+    parser.add_argument("--n-warmup-tokens", "-nwt", type=int, default=128, help="Number of tokens passed to " \
+        "llama-bench during each warmup loop. In case of large models (and you getting small tg tokens/s), "
+        "if n_warmup_tokens is too large, it can happen that you warmup in the first warmup cycle, and you end " \
+        "up not detecting the warmup. ")
+    
+    parser.add_argument("--no-warmup", action="store_true", help="Skip the initial system warmup phase before " \
+    "optimization (for debugging/testing).")
+
     #parser.add_argument('--version', "-v", action='version', version='llama-optimus v0.1.0')
     parser.add_argument("--version", "-v", action='version', version=f'llama-optimus v{__version__}')
 

@@ -1,5 +1,5 @@
 # core.py
-# handle core functions 
+# Core functions for llama-optimus optimization
 
 import subprocess
 import re
@@ -70,7 +70,7 @@ def run_llama_bench_with_csv(cmd, metric):
     if result.returncode != 0:
         raise RuntimeError(result.stderr)
     
-    # for debug 
+    # debug 
     #print(result.stdout)
 
     # Save stdout to a temp CSV file
@@ -397,7 +397,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print(f"Best Stage_1 {metric} tokens/sec:", study_1.best_value)
     print("")
 
-    # output_1 best llama.cpp parameters for Trials stage_1
+    # Output: Best llama.cpp parameters from Stage 1 trials
     best_1 = study_1.best_trial.params
 
     # outpus
@@ -432,7 +432,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print(f"Best Stage_2 {metric} tokens/sec:", study_2.best_value)
     print("")
 
-    # output_1 best llama.cpp parameters for Trials stage_1
+    # Output: Best llama.cpp parameters from Stage 2 trials
     best_2 = study_2.best_trial.params
 
     # in case --override-tensor none, pass ""
@@ -457,7 +457,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print(f"Best Stage_3 {metric} tokens/sec:", study_3.best_value)
     print("")
 
-    # output_1 best llama.cpp parameters for Trials stage_1
+    # Output: Best llama.cpp parameters from Stage 3 trials
     best_3 = study_3.best_trial.params
 
     ### END OF TRIALS ###

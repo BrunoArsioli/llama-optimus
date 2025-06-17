@@ -26,12 +26,15 @@
 
 - **Tunes** `llama.cpp` parameters for maximum `tokens/sec`, using automated parameter search.
 - **Bayesian optimization** (Optuna) is used to maximize tokens/sec for prompt processing, generation or both
-- **Estimates or accepts user-specified GPU layer count (`-ngl`).**
+- **Estimates user-specified GPU layer count (`-ngl`).**
+- **Supports override patterns for --override-tensor**: allows you to optimize advanced memory offloading for large models or low VRAM systems.
+- **Automatic system warmup detection** to ensure benchmarking is done under real-world, “steady-state” conditions.
+- **Grid search over categorical parameters** (for flags like --override-tensor and --flash-attn ) combined with Bayesian tuning of numerical ones.
 - **CLI interface:** All major parameters and paths are settable via command line or environment variable.
 - **Built on:** [Optuna](https://optuna.org/) for hyperparameter optimization and [llama.cpp](https://github.com/ggerganov/llama.cpp) for inference.
 - Adapts to Apple Silicon, Linux x86, and NVIDIA GPU systems
 - Outputs copy-paste-ready commands for `llama-server` and `llama-bench`
-- Quick/robust benchmarks (controlable via `-r` flag)
+- **Quick & robust benchmarks:** Controlable via `-repeat` and `--n-tokens` flags which set the number of llama-bench repetitions per trial, and the number of tokes used when estimating tokens/s velocity in prompt processing (pp) and text generation (tg). 
 
 ---
 
@@ -94,14 +97,20 @@ for a robust test, you can use more trials (default: 45), and more benchmark rep
 ```bash
 llama-optimus --trials 70 -r 5 
 ```
+
+to grid search all override-tensor presets and flash-attn options, and optimize numerical flags 
+```bash
+llama-optimus --override-mode scan --trials 20 --metric tg
+```
+
 ### Quick Notes/FAQ:
-What is a **trial**? It is a test of the model performance (e.g. how many tokens/s it can generate) given a configuration of llama.cpp paramters.
+What is a **trial**? It is a test of the model performance (e.g. how many tokens/s it can generate) given a configuration of llama.cpp parameters.
 
 e.g.: When running `llama-optimus` you will see the output for every trial, like this: 
 
-Trial 0 finished with value: 72.43 and parameters: {'batch': 32, 'flash': 1, 'u_batch': 8, 'threads': 11, 'gpu_layers': 97}. Best is trial 0 with value: 72.43 
+Trial 0 finished with value: 72.43 and parameters: {'batch': 32, 'flash_attn': 1, 'u_batch': 8, 'threads': 11, 'gpu_layers': 97}. Best is trial 0 with value: 72.43 
 
-Meaning, if you run a llama-server with flags: --batchh-size 32 --flash-attn 1 --ubatch-size 8 --threads 11 -ngl 97 ; you will get about 72.43 tokens/s in token generation. 
+Meaning, if you run a llama-server with flags: --batchh-size 32 --flash-attn --ubatch-size 8 --threads 11 -ngl 97 ; you will get about 72.43 tokens/s in token generation. 
 
 What is a **repetition** or `-r` ?
 
@@ -109,12 +118,12 @@ The result we got from Trial 0 (**72.43 tokens/s**) is a mean value; It was calc
 
 Why do we need to **repeat** runs before calculating the result (tokens/s) ?
 
-That is because, everytime you run `llama-bench` (the llama.cpp benchmark) you get a sligtly diferent estimate for the tokens/s metric. There is a degree of variability in the results; We calculate a mean value to base our final decision on more reliable/robust results.  
+That is because, everytime you run `llama-bench` (the llama.cpp benchmark) you get a sligtly different estimate for the tokens/s metric. There is a degree of variability in the results; We calculate a mean value to base our final decision on more reliable/robust results.  
 
 ### Option B: Pass as CLI flags
 
 ```bash
-llama-optimus --llama-bin ~my_path_to/llama.cpp/build/bin --model ~my_path_to/models/my-model.gguf
+llama-optimus --llama-bin ~my_path_t/llama.cpp/build/bin --model ~my_path_to/models/my-model.gguf
 ```
 
 ### Option C: Source a helper script
@@ -140,7 +149,7 @@ Or, if you prefer to use environment variables :
 ```bash
 export LLAMA_BIN=my_path_to/llama.cpp/build/bin
 export MODEL_PATH=my_path_to/model.gguf
-llama-optimus --trials 25 --metric tg
+llama-optimus --trials 25 -r 3 --metric tg
 ```
 
 **Common arguments:**
@@ -152,8 +161,16 @@ llama-optimus --trials 25 --metric tg
   `tg` = token generation speed,
   `pp` = prompt processing speed,
   `mean` = average of both
-* `-r` / `--repeat`   How many repetitions per configuration (default: 2; use 1 for quick/dirty, 5 for robust)
+* `-r` / `--repeat` How many repetitions per configuration (default: 2; use 1 for quick/dirty, 5 for robust)
 * `--n-tokens`  Number of tokens to use for benchmarking. Larger = more stable measurements (default: 60).
+* `--override-mode`  How to treat --override-tensor (default: scan):
+    `none`: ignore this flag (do not scan over override-tensor space)
+    `scan`: grid search all preset patterns (from override_patterns.py)
+    `custom`: ([TBD]future) user-defined override tensor patterns
+* `--n-warmup-tokens` Number of tokens passed to llama-bench during each warmup loop
+* `--no-warmup` Skip warmup phase (for test/debug purpose)
+
+
 
 See all options:
 
@@ -165,7 +182,7 @@ llama-optimus --help
 
 ## How it works
 
-- By default, starts with a warm-up (check why a warm up is needed)
+- By default, starts with a warm-up. (see extra notes)
 
 - By default, starts by estimating your hardware's max `-ngl` (GPU layers) for a given model. If you know your max, use `--ngl-max` to skip this step.
 
@@ -173,11 +190,21 @@ llama-optimus --help
 
 - Runs quick benchmarks (with `llama-bench`) for each config, parses results from the CSV, and feeds back to the optimizer.
 
+- Hierarchical optimization:
+
+    Stage 1: Bayesian search over numerical flags (batch_size, ubatch_size, threads, gpu_layers)
+
+    Stage 2: Grid search over categorical flags (override-tensor, flash-attn), using the best numericals found
+
+    Stage 3: Final fine-tuning over numerical flags with best categorical flags fixed
+
 - Finds the best flags in minutes —no need to try random combinations!
 
 - Handles errors (non-working configs are skipped).
 
 - You can **abort Trial** at any time, and still follow the best result/configuration achieved so far. 
+
+**Notes:** llama-optimus ensures your system is warmed up before starting optimization, to avoid misleading cold-start results (i.e. cold-starts lead to larger tokens/s counts; This a source of confugion for the community, because cold-start results are usually reported as "I just found a new configuration which improved tokens/s in 20%", which is misleading).
 
 ---
 
@@ -197,7 +224,7 @@ Best tg tokens/sec: 73.5
 # You are ready to run a local llama-server:
 
 # For optimal inference:
-llama-server --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1024 -ngl 93 --flash-attn 1
+llama-server --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1024 -ngl 93 --flash-attn 
 
 # To benchmark both generation and prompt processing speeds:
 llama-bench --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1024 -ngl 93 --flash-attn 1 -n 128 -p 128 -r 3 -o csv
@@ -209,7 +236,7 @@ llama-bench --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1
 
 ## Tip 
 
-The default values for prompt proccessing `-p 50` and prompt generation `-n 50` gives fast trials.
+The default values for prompt processing `-p 50` and prompt generation `-n 50` gives fast trials.
 
 The user can control this via `--n-tokens` parameter, which can be passed to llama-optimus during launch: lead to stable and robust results 
 
@@ -217,10 +244,15 @@ The user can control this via `--n-tokens` parameter, which can be passed to lla
 llama-optimus --n-tokens 128
 ```
 
-Later, for a stable final score, re-run llama-bench with the best flags found (dont'forget to warm-up first):
-```bash
-llama-bench ... -p 512 -n 128 -r 5 -o csv
+Later, for a stable final score, re-run llama-bench with the best flags found (don't forget to warm-up first):
+```bas'
+llama-bench ... -p 512 -n 256 -r 5 --progress
 ```
+
+E.g. of launching a server with optimized flags will look like this:
+```bash
+llama-server --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1024 -ngl 63 --flash-attn  --override-tensor "blk\.(6|7|8|9|[1-9][0-9]+)\.ffn_.*_exps\.=CPU"
+````
 
 ---
 
@@ -255,6 +287,8 @@ llama-optimus/
 │           ├── __init__.py
 │           ├── core.py   # all optimization/benchmark logic
 │           └── cli.py    # CLI interface (argparse, entrypoint)
+│           └── search_space.py      # the numerical search space 
+│           └── override_patterns.py # override-tensor patterns for use with llama.cpp.
 │
 ├── test/
 │   └── test_core.py
