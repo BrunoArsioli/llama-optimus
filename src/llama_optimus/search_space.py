@@ -1,3 +1,10 @@
+# src/llama_optimus/search_space.py
+import os
+from .override_patterns import OVERRIDE_PATTERNS  # if needed
+
+# count number of available cpu cores
+max_threads = os.cpu_count()
+
 SEARCH_SPACE = {
     'batch_size'     : {'low': 8, 'high': 16384},   # 
     'ubatch_size'    : {'low': 4, 'high': 8192},    #  
