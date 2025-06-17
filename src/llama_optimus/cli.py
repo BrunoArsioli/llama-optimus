@@ -33,11 +33,11 @@ def main():
     parser.add_argument("--ngl-max",type=int, help="Maximum number of model layers for -ngl (skip estimation if provided; estimation runs by default).")
     parser.add_argument("--repeat", "-r", type=int, default=2, help="Number of llama-bench runs per configuration (higher = more robust, lower = faster; default: 2, for quick assessement: 1)")
     parser.add_argument("--n-tokens", type=int, default=60, help="Number of tokens used in llama-bench to test velocity of prompt proccessing and text generation. Keep in mind there is large variability in tok/s outputs. If n_tokens is too low, uncertainty takes over. Try to use n_tokens > 60. For fast exploration: --n-tokens 10 -repeat 2")
-    parser.add_argument("--n-warmup-tokens", type=int, default=128, help="Number of tokens passed to llama-bench during each warmup loop. In case of large models (and you getting small tg tokens/s), if n_warmup_tokens is too large, it can happen that you warmup in the first warmup cycle, and you end up not detecting the warmup.  Keep in mind there is large variability in tok/s outputs. If n_tokens is too low, uncertainty takes over.")
+    parser.add_argument("--n-warmup-tokens", "-nwt", type=int, default=128, help="Number of tokens passed to llama-bench during each warmup loop. In case of large models (and you getting small tg tokens/s), if n_warmup_tokens is too large, it can happen that you warmup in the first warmup cycle, and you end up not detecting the warmup.  Keep in mind there is large variability in tok/s outputs. If n_tokens is too low, uncertainty takes over.")
     #parser.add_argument('--version', "-v", action='version', version='llama-optimus v0.1.0')
     parser.add_argument("--version", "-v", action='version', version=f'llama-optimus v{__version__}')
 
-    parser.add_argument("--override-mode", type=str, default="", choices=["none", "scan", "custom"],
+    parser.add_argument("--override-mode", type=str, default="scan", choices=["none", "scan", "custom"],
     help=f"'none': do not scan this parameter; scan: 'scan' over preset override-tensor patterns; " \
     f"'custom': (future) user provides their own pattern(s). Available override patterns: {OVERRIDE_PATTERNS.keys()}" )
     

@@ -344,7 +344,15 @@ def warmup_until_stable(llama_bench_path, model_path, metric, ngl, threshold, mi
             else:
                 drops = 0
             if drops >= 2: 
-                print("Consistent Performance drop detected. Your system warmed up. Ready to go!")
+
+                print("")
+                print("##########################################")
+                print("# Consistent Performance drop detected.  #")
+                print("# Your system warmed up.                 #") 
+                print("# Ready to go!                           #")
+                print("##########################################")
+                print("")
+
                 break
         # For i < 2: do not compare, just accumulate
 
@@ -375,22 +383,29 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     """
 
     # outpus
-    print(f"First stage")
+    print("")
+    print("############################################################")
+    print("# First stage: Initial exploration of parameter space      #")
+    print("############################################################")
+    print("")
 
     # TRIALS : stage_1
     sampler = TPESampler(multivariate=True)  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
     study_1 = optuna.create_study(direction="maximize", sampler=sampler)
     # use lambda to inject metric, repeat ...  
     study_1.optimize(lambda trial: objective_1(trial, n_tokens, metric, repeat, llama_bench_path, model_path), n_trials=n_trials)
-    print("Best config Stage_1:", study_1.best_trial.params)
+    print("")
+    print("Best config Stage_1:", study_1.best_trial.params) # output_1 best llama.cpp parameters for Trials stage_1
     print(f"Best Stage_1 {metric} tokens/sec:", study_1.best_value)
-
-    # output_1 best llama.cpp parameters for Trials stage_1
-    best_1 = study_1.best_trial.params
-    print("Best config Stage_1:", best_1)
+    print("")
 
     # outpus
-    print(f"Second stage: Grid search over categorical parameters")
+    print("")
+    print("############################################################")
+    print("# Second stage: Grid search over categorical parameters    #")
+    print("############################################################")
+    print("")
+
 
     # TRIALS : stage_2
     if override_mode == "scan": 
@@ -411,26 +426,24 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     study_2.optimize(lambda trial: objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, 
                                                override_mode, best_1['batch'], best_1['u_batch'], 
                                                best_1['threads'], best_1['gpu_layers']), n_trials=n_trials_2)
+    print("")
     print("Best config Stage_2:", study_2.best_trial.params)
     print(f"Best Stage_2 {metric} tokens/sec:", study_2.best_value)
+    print("")
 
     # output_1 best llama.cpp parameters for Trials stage_1
     best_2 = study_2.best_trial.params
-
-    #degug
-    print(f"best_2 list: {best_2}")
 
     # in case --override-tensor none, pass ""
     if 'override_tensor' not in best_2:
         best_2['override_tensor'] = "none"
 
-    # debug
-    print(f"best_2 list after appending: {best_2}")
-
-
     # outpus
-    print(f"Thirs stage: Finetune final config")
-
+    print("")
+    print("#######################################")
+    print("# Third stage: Finetune final config  #")
+    print("#######################################")
+    print("")
 
     # TRIALS : stage_3
     sampler_3 = TPESampler(multivariate=True)  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
@@ -438,16 +451,20 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     # use lambda to inject metric, repeat ...  
     study_3.optimize(lambda trial: objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, 
                                                best_2['override_tensor'], best_2['flash_attn'], override_mode), n_trials=n_trials)
+    print("")
     print("Best config Stage_3:", study_3.best_trial.params)
     print(f"Best Stage_3 {metric} tokens/sec:", study_3.best_value)
+    print("")
 
     # output_1 best llama.cpp parameters for Trials stage_1
     best_3 = study_3.best_trial.params
 
     ### END OF TRIALS ###
 
-    print("\n# You are ready to run a local llama-server:")
-    print("\n# llama-server (inference): listening at http://127.0.0.1:8080/ in your browser.")
+    print("")
+    print("You are ready to run a local llama-server:")
+    print("llama-server (inference): listening at http://127.0.0.1:8080/ in your browser.")
+    print("")
 
     # 1. llama-server (inference); will be listening at http://127.0.0.1:8080/ in your browser. 
     llama_server_cmd = (
@@ -457,12 +474,16 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         f" --ubatch-size {best_3['u_batch']}"
         f" -ngl {best_3['gpu_layers']}"
         f" --flash-attn {best_2['flash_attn']}"
-        f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"        
         #f" --flash-attn-type {best['flash_type']}"
     )
 
-    print("\n# For optimal inference, run:")
-    print(f"\n {llama_server_cmd}")
+    if best_2['override_tensor'] != "none":
+        llama_server_cmd += ["--override-tensor", OVERRIDE_PATTERNS[best_2['override_tensor']]] # only add if --override-tensor key is != "none" 
+
+    print("")
+    print("# For optimal inference, run:")
+    print(f"{llama_server_cmd}")
+    print("")
 
     # 2. llama-bench (benchmark for both tg and pp)
     llama_bench_cmd = (
@@ -473,9 +494,16 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         f" --ubatch-size {best_3['u_batch']}"
         f" -ngl {best_3['gpu_layers']}"
         f" --flash-attn {best_2['flash_attn']}"
-        f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"
+        #f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"
         f" -n 128 -p 128 -r 5 --progress"
     )
-    print("\n# To benchmark both generation and prompt processing speeds:")
-    print(f"\n{llama_bench_cmd}")
+
+    if best_2['override_tensor'] != "none":
+        llama_bench_cmd += ["--override-tensor", OVERRIDE_PATTERNS[best_2['override_tensor']]] # only add if --override-tensor key is != "none" 
+
+    print("")
+    print("# To benchmark both generation and prompt processing speeds:")
+    print(f"{llama_bench_cmd}")
+    print("")
+
 
