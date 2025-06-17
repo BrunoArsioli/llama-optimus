@@ -4,11 +4,12 @@
 import argparse, os, sys
 from .core import run_optimization, estimate_max_ngl, SEARCH_SPACE, warmup_until_stable
 from .override_patterns import OVERRIDE_PATTERNS   
+from .search_space import SEARCH_SPACE, max_threads 
 
 from llama_optimus import __version__
 
 # count number of available cpu cores
-max_threads = os.cpu_count()
+#max_threads = os.cpu_count()
 
 
 def main():
@@ -32,6 +33,7 @@ def main():
     parser.add_argument("--ngl-max",type=int, help="Maximum number of model layers for -ngl (skip estimation if provided; estimation runs by default).")
     parser.add_argument("--repeat", "-r", type=int, default=2, help="Number of llama-bench runs per configuration (higher = more robust, lower = faster; default: 2, for quick assessement: 1)")
     parser.add_argument("--n-tokens", type=int, default=60, help="Number of tokens used in llama-bench to test velocity of prompt proccessing and text generation. Keep in mind there is large variability in tok/s outputs. If n_tokens is too low, uncertainty takes over. Try to use n_tokens > 60. For fast exploration: --n-tokens 10 -repeat 2")
+    parser.add_argument("--n-warmup-tokens", type=int, default=128, help="Number of tokens passed to llama-bench during each warmup loop. In case of large models (and you getting small tg tokens/s), if n_warmup_tokens is too large, it can happen that you warmup in the first warmup cycle, and you end up not detecting the warmup.  Keep in mind there is large variability in tok/s outputs. If n_tokens is too low, uncertainty takes over.")
     #parser.add_argument('--version', "-v", action='version', version='llama-optimus v0.1.0')
     parser.add_argument("--version", "-v", action='version', version=f'llama-optimus v{__version__}')
 
@@ -73,7 +75,7 @@ def main():
     # system warm-up before optimization
     max_ngl_wup=SEARCH_SPACE['gpu_layers']['high']
     warmup_until_stable(llama_bench_path=llama_bench_path, model_path=model_path, metric=args.metric, 
-                        ngl=max_ngl_wup, threshold=0.8, min_runs, max_warmup=30)
+                        ngl=max_ngl_wup, threshold=0.07, min_runs=3, max_warmup=30,n_warmup_tokens=args.n_warmup_tokens)
 
     run_optimization(n_trials=args.trials, n_tokens=args.n_tokens, metric=args.metric, 
                      repeat=args.repeat, llama_bench_path=llama_bench_path, 

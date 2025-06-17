@@ -11,10 +11,7 @@ import tempfile
 from optuna.samplers import TPESampler
 from optuna.samplers import GridSampler
 from .override_patterns import OVERRIDE_PATTERNS   
-from .search_space import SEARCH_SPACE 
-
-# count number of available cpu cores
-max_threads = os.cpu_count()
+from .search_space import SEARCH_SPACE, max_threads 
 
 def estimate_max_ngl(llama_bench_path, model_path, min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high']):
     """
@@ -131,7 +128,7 @@ def objective_1(trial, n_tokens, metric, repeat, llama_bench_path, model_path):
     # Build llama-bench command 
     cmd_1 = [
         llama_bench_path, # path to your llama-bench binary
-        "--no-warmup"      ,                  # disable warm-up. alredy warmed-up in llama-optimus launch
+        #"--no-warmup"      ,                 # disable warm-up. alredy warmed-up in llama-optimus launch; [TBD in llama.cpp]
         "--batch-size"     , str(batch),      # (-b  flag) (default 2024)
         "--ubatch-size"    , str(u_batch),    # (-ub flag) (default 512) 
         "--threads"        , str(threads),    # (-t  flag) (default 2)  
@@ -237,7 +234,7 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         return 0.0
 
 
-def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, override_pattern, flash_attn):
+def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, override_pattern, flash_attn, override_mode):
     """
     Objective function for Optuna optimization. 
     After we select promising '--override-tensor' and '--flash-attn'
@@ -306,32 +303,50 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         return 0.0
 
 
-def warmup_until_stable(llama_bench_path, model_path, metric, ngl, threshold=0.09, min_runs=3, max_warmup=40):
-    prev_performance = None
-    drops = 0
+def warmup_until_stable(llama_bench_path, model_path, metric, ngl, threshold, min_runs, max_warmup,n_warmup_tokens):
+    """
+    Warm-up doctrine:
+    - Always run at least 3 warmup cycles before checking for stability.
+    - For early runs (i < 3), just collect data—do not compare yet.
+    - From the 4th run onward, compare the current value to the value from 3 runs before.
+      This catches slow, stepped drops caused by mid-benchmark thermal or system events.
+    - If performance drops by more than `threshold` (e.g., 10%) compared to 3 runs prior,
+      increment a `drops` counter.
+    - If `drops` reaches `min_runs`, declare system warmed up and ready.
+    - This doctrine ensures we don’t “exit early” on temporary or noisy values, and are
+      able to handle gradual & small performance drops (i.e. when permance drops happen
+      in the midle of the workload of a 'in loop' llama-bench runs).
+    """
+
     history = []
+    drops = 0
 
     # build cmd warm up 
     cmd_wup = [
-        llama_bench_path, # path to your llama-bench binary
-        "-ngl"             , str(ngl),   # (-ngl or --n-gpu-layers flag)
-        "--model"          , model_path, # 
-        "-r"               , "2",        # number of benchmark repetitions: set to 5 for warm up 
-        "-o"               , "csv"       # save temporary .csv file with llama-bench outputs
+        llama_bench_path,
+        "-ngl", str(ngl),
+        "--model", model_path,
+        "-r", "2",       # benchmark repetitions
+        "-n", str(n_warmup_tokens),
+        "-p", str(n_warmup_tokens), 
+        "-o", "csv"
     ]
 
     for i in range(max_warmup):
         performance = run_llama_bench_with_csv(cmd_wup, metric)
         history.append(performance)
         print(f"Warmup {i+1}: {performance:.2f} tok/s")
-        if prev_performance is not None and performance < prev_performance * (1 - threshold):
-            drops += 1
-        else:
-            drops = 0
-        if drops >= min_runs:
-            print("Consistent Performance drop detected. Your system warmed up. Ready to go!")
-            break
-        prev_performance = performance
+        
+        if i >= 3:  # Only compare after the third run
+            compare_perf = history[i-3]
+            if performance < compare_perf * (1 - threshold):
+                drops += 1
+            else:
+                drops = 0
+            if drops >= 2: 
+                print("Consistent Performance drop detected. Your system warmed up. Ready to go!")
+                break
+        # For i < 2: do not compare, just accumulate
 
         print("")
         print("Warmup performance history:", history)
@@ -359,6 +374,9 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         None 
     """
 
+    # outpus
+    print(f"First stage")
+
     # TRIALS : stage_1
     sampler = TPESampler(multivariate=True)  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
     study_1 = optuna.create_study(direction="maximize", sampler=sampler)
@@ -371,6 +389,8 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     best_1 = study_1.best_trial.params
     print("Best config Stage_1:", best_1)
 
+    # outpus
+    print(f"Second stage: Grid search over categorical parameters")
 
     # TRIALS : stage_2
     if override_mode == "scan": 
@@ -402,10 +422,14 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
 
     # in case --override-tensor none, pass ""
     if 'override_tensor' not in best_2:
-        best_2['override_tensor'] = ""
+        best_2['override_tensor'] = "none"
 
     # debug
     print(f"best_2 list after appending: {best_2}")
+
+
+    # outpus
+    print(f"Thirs stage: Finetune final config")
 
 
     # TRIALS : stage_3
@@ -413,7 +437,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     study_3 = optuna.create_study(direction="maximize", sampler=sampler_3)
     # use lambda to inject metric, repeat ...  
     study_3.optimize(lambda trial: objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, 
-                                               best_2['override_tensor'], best_2['flash_attn']), n_trials=n_trials)
+                                               best_2['override_tensor'], best_2['flash_attn'], override_mode), n_trials=n_trials)
     print("Best config Stage_3:", study_3.best_trial.params)
     print(f"Best Stage_3 {metric} tokens/sec:", study_3.best_value)
 
@@ -436,6 +460,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"        
         #f" --flash-attn-type {best['flash_type']}"
     )
+
     print("\n# For optimal inference, run:")
     print(f"\n {llama_server_cmd}")
 
