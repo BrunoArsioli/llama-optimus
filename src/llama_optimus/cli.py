@@ -105,7 +105,7 @@ def main():
         print("#######################")
         print("")
         warmup_until_stable(llama_bench_path=llama_bench_path, model_path=model_path, metric=args.metric, 
-                            ngl=max_ngl_wup, threshold=0.07, min_runs=3, max_warmup=30,n_warmup_tokens=args.n_warmup_tokens)
+                            ngl=max_ngl_wup, threshold=0.06, min_runs=3, max_warmup=30,n_warmup_tokens=args.n_warmup_tokens)
 
     print("")
     print("##################################")

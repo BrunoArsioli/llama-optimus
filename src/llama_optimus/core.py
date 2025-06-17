@@ -28,8 +28,6 @@ def estimate_max_ngl(llama_bench_path, model_path, min_ngl=0, max_ngl=SEARCH_SPA
     """
 
     low, high = min_ngl, max_ngl
-    print("First, we need to estimate the maximum number of model layer (-ngl) " \
-    "that can be loaded to your RAM memory.")
 
     while low < high:
         mid = (low + high + 1) // 2
@@ -466,7 +464,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
 
     print("")
     print("You are ready to run a local llama-server:")
-    print("llama-server (inference): listening at http://127.0.0.1:8080/ in your browser.")
+    print("If you launch llama-server, it will be listening at http://127.0.0.1:8080/ in your browser.")
     print("")
 
     # 1. llama-server (inference); will be listening at http://127.0.0.1:8080/ in your browser. 
@@ -476,12 +474,15 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         f" --batch-size {best_3['batch']}"
         f" --ubatch-size {best_3['u_batch']}"
         f" -ngl {best_3['gpu_layers']}"
-        f" --flash-attn {best_2['flash_attn']}"
         #f" --flash-attn-type {best['flash_type']}"
     )
 
     if best_2['override_tensor'] != "none":
-        llama_server_cmd += ["--override-tensor", OVERRIDE_PATTERNS[best_2['override_tensor']]] # only add if --override-tensor key is != "none" 
+        llama_server_cmd += f'  --override-tensor "{OVERRIDE_PATTERNS[best_2["override_tensor"]]}" '  # only add if --override-tensor key is != "none" 
+
+    # for llama-server, --flash-att is of 'action' type (i.e. do not accept <0|1> values).
+    if best_2['flash_attn'] == 1:
+        llama_server_cmd += f" --flash-attn "    
 
     print("")
     print("# For optimal inference, run:")
@@ -496,13 +497,13 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         f" --batch-size {best_3['batch']}"
         f" --ubatch-size {best_3['u_batch']}"
         f" -ngl {best_3['gpu_layers']}"
-        f" --flash-attn {best_2['flash_attn']}"
+        f" --flash-attn {best_2['flash_attn']}"  # in llama-server, --flash-attn is type 'int', accepts <0|1> values.
         #f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"
-        f" -n 128 -p 128 -r 5 --progress"
+        f" -n 128 -p 128 -r 5 --progress "
     )
 
     if best_2['override_tensor'] != "none":
-        llama_bench_cmd += ["--override-tensor", OVERRIDE_PATTERNS[best_2['override_tensor']]] # only add if --override-tensor key is != "none" 
+        llama_bench_cmd += f' --override-tensor "{OVERRIDE_PATTERNS[best_2["override_tensor"]]}" ' # concatenate string if --override-tensor key is != "none" 
 
     print("")
     print("# To benchmark both generation and prompt processing speeds:")
