@@ -395,9 +395,12 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     # use lambda to inject metric, repeat ...  
     study_1.optimize(lambda trial: objective_1(trial, n_tokens, metric, repeat, llama_bench_path, model_path), n_trials=n_trials)
     print("")
-    print("Best config Stage_1:", study_1.best_trial.params) # output_1 best llama.cpp parameters for Trials stage_1
+    print("Best config Stage_1:", study_1.best_trial.params) 
     print(f"Best Stage_1 {metric} tokens/sec:", study_1.best_value)
     print("")
+
+    # output_1 best llama.cpp parameters for Trials stage_1
+    best_1 = study_1.best_trial.params
 
     # outpus
     print("")

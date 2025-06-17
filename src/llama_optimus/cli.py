@@ -34,6 +34,7 @@ def main():
     parser.add_argument("--repeat", "-r", type=int, default=2, help="Number of llama-bench runs per configuration (higher = more robust, lower = faster; default: 2, for quick assessement: 1)")
     parser.add_argument("--n-tokens", type=int, default=60, help="Number of tokens used in llama-bench to test velocity of prompt proccessing and text generation. Keep in mind there is large variability in tok/s outputs. If n_tokens is too low, uncertainty takes over. Try to use n_tokens > 60. For fast exploration: --n-tokens 10 -repeat 2")
     parser.add_argument("--n-warmup-tokens", "-nwt", type=int, default=128, help="Number of tokens passed to llama-bench during each warmup loop. In case of large models (and you getting small tg tokens/s), if n_warmup_tokens is too large, it can happen that you warmup in the first warmup cycle, and you end up not detecting the warmup.  Keep in mind there is large variability in tok/s outputs. If n_tokens is too low, uncertainty takes over.")
+    parser.add_argument("--no-warmup", action="store_true", help="Skip the initial system warmup phase before optimization (for debugging/testing).")
     #parser.add_argument('--version', "-v", action='version', version='llama-optimus v0.1.0')
     parser.add_argument("--version", "-v", action='version', version=f'llama-optimus v{__version__}')
 
@@ -56,26 +57,61 @@ def main():
         print(f"ERROR: llama-bench not found at {llama_bench_path}. ...", file=sys.stderr)
         sys.exit(1)
 
+    print("")
+    print("#################")
+    print("# LLAMA-OPTIMUS #")
+    print("#################")
+
+    print("")
     print(f"Number of CPUs: {max_threads}.")
     print(f"Path to 'llama-bench':{llama_bench_path}")  # in llama.cpp/tools/
     print(f"Path to 'model.gguf' file:{model_path}")
-
+    print("")
 
     # default: estimate maximum number of layers before run_optimization 
     # in case the user knows ngl_max value, skip ngl_max estimate
     if args.ngl_max is not None: 
         SEARCH_SPACE['gpu_layers']['high'] = args.ngl_max
+        print("")
         print(f"User-specified maximum -ngl set to {args.ngl_max}")
+        print("")
     else:
+        print("")
+        print("########################################################################")
+        print("# Find maximum number of model layers that can be written to your VRAM #")
+        print("########################################################################")
+        print("")
+
         SEARCH_SPACE['gpu_layers']['high'] = estimate_max_ngl(
             llama_bench_path=llama_bench_path, model_path=model_path, 
             min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high'])
+        print("")
         print(f"Setting maximum -ngl to {SEARCH_SPACE['gpu_layers']['high']}")
+        print("")
 
     # system warm-up before optimization
     max_ngl_wup=SEARCH_SPACE['gpu_layers']['high']
-    warmup_until_stable(llama_bench_path=llama_bench_path, model_path=model_path, metric=args.metric, 
-                        ngl=max_ngl_wup, threshold=0.07, min_runs=3, max_warmup=30,n_warmup_tokens=args.n_warmup_tokens)
+    
+    if args.no_warmup:
+        print("")
+        print("##############################################")
+        print("# !!!Optimization running without warmup!!!  #")
+        print("##############################################")
+        print("")
+    else: 
+        print("")
+        print("#######################")
+        print("# Starting warmup...  #")
+        print("#######################")
+        print("")
+        warmup_until_stable(llama_bench_path=llama_bench_path, model_path=model_path, metric=args.metric, 
+                            ngl=max_ngl_wup, threshold=0.07, min_runs=3, max_warmup=30,n_warmup_tokens=args.n_warmup_tokens)
+
+    print("")
+    print("##################################")
+    print("# Starting Optimization Loop...  #")
+    print("##################################")
+    print("")
 
     run_optimization(n_trials=args.trials, n_tokens=args.n_tokens, metric=args.metric, 
                      repeat=args.repeat, llama_bench_path=llama_bench_path, 
