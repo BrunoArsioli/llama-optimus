@@ -11,7 +11,7 @@ from importlib.metadata import version, PackageNotFoundError
 try:
     __version__ = version(__name__)
 except PackageNotFoundError:        # package not installed
-    __version__ = "0.1.3"
+    __version__ = "0.1.4"
 
 # ensure functions and constants are importable from the package root
 from .core import (
