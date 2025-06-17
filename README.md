@@ -234,6 +234,8 @@ If you start Trials (Stage 1 or 2) with “cold” hardware, the “best” conf
 
 For this reason, llama-optimus warms-up before scaning the parameter space with its Bayesian TPESampler. 
 
+**Keep in mind**: never trust cold-start numbers. 
+Warming up the system and waiting for stable, “saturated” (worst-case, real-world) performance will make your optimizer results much more robust and grounded to real use cases.
 
 ## 🛟 Troubleshooting 🛟
 

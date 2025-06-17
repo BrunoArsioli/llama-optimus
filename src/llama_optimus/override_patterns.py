@@ -3,21 +3,23 @@
 Dictionary of override-tensor patterns for use with llama.cpp.
 Key: short, human-readable name.
 Value: the pattern string to pass to --override-tensor.
+
+Notes: The keys are preset names (shown in CLI as choices); 
+the values are regex patterns passed to --override-tensor.
+
+These focus on offloading the largest MoE expert tensors 
+(ffn_up_exps, ffn_down_exps, etc).
+
+Advanced users can add custom patterns as needed for advanced setups.
 """
 
+# test version
 #OVERRIDE_PATTERNS = {
 #    #"none"          : "",
 #    "ffn_cpu_all"   : r"blk\.\d+\.ffn_.*_exps.=CPU",
 #    "ffn_cpu_even"  : r"blk\.(?:[0-9]*[02468])\.ffn_.*_exps.=CPU",
 #    "ffn_cpu_odd"   : r"blk\.(?:[0-9]*[13579])\.ffn_.*_exps.=CPU",
 #}
-
-
-# override_patterns.py
-
-# The keys are preset names (shown in CLI as choices); the values are regex patterns passed to --override-tensor.
-# These focus on offloading the largest MoE expert tensors (ffn_up_exps, ffn_down_exps, etc).
-# You can add custom patterns as needed for advanced setups.
 
 OVERRIDE_PATTERNS = {
     # pass no override-tensor flag

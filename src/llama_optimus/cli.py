@@ -2,7 +2,7 @@
 # handle parsing, validation, and env setup
 
 import argparse, os, sys
-from .core import run_optimization, estimate_max_ngl, SEARCH_SPACE
+from .core import run_optimization, estimate_max_ngl, SEARCH_SPACE, warmup_until_stable
 from .override_patterns import OVERRIDE_PATTERNS   
 
 from llama_optimus import __version__
@@ -70,6 +70,10 @@ def main():
             min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high'])
         print(f"Setting maximum -ngl to {SEARCH_SPACE['gpu_layers']['high']}")
 
+    # system warm-up before optimization
+    max_ngl_wup=SEARCH_SPACE['gpu_layers']['high']
+    warmup_until_stable(llama_bench_path=llama_bench_path, model_path=model_path, metric=args.metric, 
+                        ngl=max_ngl_wup, threshold=0.8, min_runs, max_warmup=30)
 
     run_optimization(n_trials=args.trials, n_tokens=args.n_tokens, metric=args.metric, 
                      repeat=args.repeat, llama_bench_path=llama_bench_path, 

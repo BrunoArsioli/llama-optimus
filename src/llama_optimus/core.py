@@ -11,28 +11,10 @@ import tempfile
 from optuna.samplers import TPESampler
 from optuna.samplers import GridSampler
 from .override_patterns import OVERRIDE_PATTERNS   
-
+from .search_space import SEARCH_SPACE 
 
 # count number of available cpu cores
 max_threads = os.cpu_count()
-
-# [TBD] move to search_space.py 
-SEARCH_SPACE = {
-    'batch_size'     : {'low': 8, 'high': 16384},   # 
-    'ubatch_size'    : {'low': 4, 'high': 8192},    #  
-    'threads':    {'low': 1, 'high': max_threads},  # Adjust range to your hardware
-    'gpu_layers': {'low': 0, 'high': 149},          # (-ngl) Set max to model + VRAM; The max value must be found first
-    'flash_attn': [0,1],                            #  --flash-attn <0|1> ; Enables flash attention       
-    'override_spc'   : list(OVERRIDE_PATTERNS.keys())  # read list from src/llama_optimus/override_patterns.py
-    #'m_map': [1],             # Fixed; Enable memory mapping (0 = load fully, 1 = mmap)
-    #'ubatch_size'    : [4, 8, 16, 24, 32, 48, 64, 96, 128, 182, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192], #  
-    #'batch_size'     : [8, 16, 24, 32, 48, 64, 96, 128, 182, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288 , 16384],  # select number from list
-    #'flash_attn_type': [0, 1, 2], # not yet merged to main llama.cpp
-}
-
-
-# estimate max value for number of layers; ngl 
-# llama-bench crash if ngl is too large. Depends on model and hardware
 
 def estimate_max_ngl(llama_bench_path, model_path, min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high']):
     """
@@ -149,13 +131,15 @@ def objective_1(trial, n_tokens, metric, repeat, llama_bench_path, model_path):
     # Build llama-bench command 
     cmd_1 = [
         llama_bench_path, # path to your llama-bench binary
+        "--no-warmup"      ,                  # disable warm-up. alredy warmed-up in llama-optimus launch
         "--batch-size"     , str(batch),      # (-b  flag) (default 2024)
         "--ubatch-size"    , str(u_batch),    # (-ub flag) (default 512) 
         "--threads"        , str(threads),    # (-t  flag) (default 2)  
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
         "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
-        "-o"               , "csv"            # save temporary .csv file with llama-bench outputs
+        "-o"               , "csv",           # save temporary .csv file with llama-bench outputs
+        "--progress"
     ]
     # note1: memory mapping is now set by default. Instead, need to add --no-map flag. 
     # note2: use "-r 5" for more robust results (mean value calculated over 5 llama-bench runs); Use "-r 1" for quick assessment 
@@ -167,7 +151,9 @@ def objective_1(trial, n_tokens, metric, repeat, llama_bench_path, model_path):
         cmd_1 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
 
     # debug
+    print("")
     print(f"cmd_1: {cmd_1}")
+    print("")
     
     try:
         tokens_per_sec = run_llama_bench_with_csv(cmd_1, metric)
@@ -218,12 +204,10 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         cmd_2 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
 
 
-    # remove flash-attn flag in case --flash-attn is 0
+    # remove flash-attn flag in case --flash-attn is 0 ; avoid possible misbehaviour in case `--flash-attn 0  != "" `
     flash_attn   = trial.suggest_categorical('flash_attn', SEARCH_SPACE['flash_attn'])
     if flash_attn == 1:  # in case of "0" option, do not pass the --flash-attn flag 
         cmd_2 += ["--flash-attn", str(flash_attn)] # test few configuration[TBD]maybe run after last optimization  
-
-    #flash_type  = trial.suggest_categorical('flash_type', SEARCH_SPACE['flash_attn_type'])
 
     # include trials over --override-tensor only if "scan" is passes to args.override_tensor
     # and, in case override_key == "none", the override-tensor flag is not inserted in cmd_2
@@ -241,7 +225,10 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
     print("")
     print(f"cmd_2: {cmd_2} ")
     print("")
-    
+
+    # Best config Stage_1: {'batch': 4809, 'u_batch': 1161, 'threads': 10, 'gpu_layers': 149}
+    # Best Stage_1 tg tokens/sec: 159.785726
+
     try:
         tokens_per_sec = run_llama_bench_with_csv(cmd_2, metric)
         return tokens_per_sec    
@@ -279,8 +266,8 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         "--ubatch-size"    , str(u_batch),    # (-ub flag) (default 512) 
         "--threads"        , str(threads),    # (-t  flag) (default 2)  
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
-        "--flash-attn"     , str(flash_attn), # enables Flash Attention, a performance optimization during inference. 
-        "--override-tensor", str(override_pattern),# enable loading larger tensors to the CPU (saving VRAM from GPU)
+        #"--flash-attn"     , str(flash_attn), # enables Flash Attention, a performance optimization during inference. 
+        #"--override-tensor", str(override_pattern),# enable loading larger tensors to the CPU (saving VRAM from GPU)
         "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
         "-o"               , "csv"            # save temporary .csv file with llama-bench outputs
@@ -292,8 +279,24 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
     if metric in ("pp", "mean"):
         cmd_3 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
 
+    # remove flash-attn flag in case --flash-attn is 0 ; avoid possible misbehaviour in case `--flash-attn 0  != "" `
+    flash_attn   = trial.suggest_categorical('flash_attn', SEARCH_SPACE['flash_attn'])
+    if flash_attn == 1:  # in case of "0" option, do not pass the --flash-attn flag 
+        cmd_3 += ["--flash-attn", str(flash_attn)] # test few configuration[TBD]maybe run after last optimization  
+
+    # include trials over --override-tensor only if "scan" is passes to args.override_tensor
+    # in case override_key == "none", the override-tensor flag is not inserted in cmd_3
+    if override_mode == "scan":
+        override_key = trial.suggest_categorical('override_tensor', list(OVERRIDE_PATTERNS.keys()))
+        if override_key != "none":  # in case of "none" option, do not pass the no --override-tensor flag 
+            cmd_3 += ["--override-tensor", OVERRIDE_PATTERNS[override_key]] # test few configuration[TBD]maybe run after last optimization  
+
+
+
     # debug
+    print("")
     print(f"cmd_3: {cmd_3}")
+    print("")
 
     try:
         tokens_per_sec = run_llama_bench_with_csv(cmd_3, metric)
@@ -301,6 +304,40 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
     except Exception as e:
         print(f"Error: {e}")
         return 0.0
+
+
+def warmup_until_stable(llama_bench_path, model_path, metric, ngl, threshold=0.09, min_runs=3, max_warmup=40):
+    prev_performance = None
+    drops = 0
+    history = []
+
+    # build cmd warm up 
+    cmd_wup = [
+        llama_bench_path, # path to your llama-bench binary
+        "-ngl"             , str(ngl),   # (-ngl or --n-gpu-layers flag)
+        "--model"          , model_path, # 
+        "-r"               , "2",        # number of benchmark repetitions: set to 5 for warm up 
+        "-o"               , "csv"       # save temporary .csv file with llama-bench outputs
+    ]
+
+    for i in range(max_warmup):
+        performance = run_llama_bench_with_csv(cmd_wup, metric)
+        history.append(performance)
+        print(f"Warmup {i+1}: {performance:.2f} tok/s")
+        if prev_performance is not None and performance < prev_performance * (1 - threshold):
+            drops += 1
+        else:
+            drops = 0
+        if drops >= min_runs:
+            print("Consistent Performance drop detected. Your system warmed up. Ready to go!")
+            break
+        prev_performance = performance
+
+        print("")
+        print("Warmup performance history:", history)
+        print("")
+
+    return history
 
 
 def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model_path, llama_bin_path, override_mode):  
@@ -396,7 +433,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         f" --ubatch-size {best_3['u_batch']}"
         f" -ngl {best_3['gpu_layers']}"
         f" --flash-attn {best_2['flash_attn']}"
-        f" --override-tensor {best_2['override_tensor']}"
+        f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"        
         #f" --flash-attn-type {best['flash_type']}"
     )
     print("\n# For optimal inference, run:")
@@ -411,8 +448,8 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         f" --ubatch-size {best_3['u_batch']}"
         f" -ngl {best_3['gpu_layers']}"
         f" --flash-attn {best_2['flash_attn']}"
-        f" --override-tensor {best_2['override_tensor']}"
-        f" -n 128 -p 128 -r 3 -o csv"
+        f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"
+        f" -n 128 -p 128 -r 5 --progress"
     )
     print("\n# To benchmark both generation and prompt processing speeds:")
     print(f"\n{llama_bench_cmd}")
