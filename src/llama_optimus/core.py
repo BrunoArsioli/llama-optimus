@@ -182,22 +182,16 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         "--ubatch-size"    , str(u_batch),    # (-ub flag) (default 512) 
         "--threads"        , str(threads),    # (-t  flag) (default 2)  
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
-        #"--flash-attn"     , str(flash_attn), # enables Flash Attention, a performance optimization during inference. 
-        #"--flash-attn-type", str(flash_type),# Metal + CUDA now have two flash-attention kernels (0 ≈ old GEMM, 1 = FMHA, 2 = in-place FMHA). 
         "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
         "-o"               , "csv"            # save temporary .csv file with llama-bench outputs
     ]
-    # note1: memory mapping is now set by default. Instead, need to add --no-map flag. 
-    # note2: use "-r 5" for more robust results (mean value calculated over 5 llama-bench runs); Use "-r 1" for quick assessment 
-    #        e.g., launch tool with: python src/optimus.py --trials 30 -r 1 
 
     # Add task-specific flags
     if metric in ("tg", "mean"):
         cmd_2 += ["-n", str(n_tokens)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
     if metric in ("pp", "mean"):
         cmd_2 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
-
 
     # remove flash-attn flag in case --flash-attn is 0 ; avoid possible misbehaviour in case `--flash-attn 0  != "" `
     flash_attn   = trial.suggest_categorical('flash_attn', SEARCH_SPACE['flash_attn'])
@@ -211,18 +205,10 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         if override_key != "none":  # in case of "none" option, do not pass the no --override-tensor flag 
             cmd_2 += ["--override-tensor", OVERRIDE_PATTERNS[override_key]] # test few configuration[TBD]maybe run after last optimization  
 
-    # whe we need the last two? It seems llama.cpp is treating --flash-attn 0 and --override-tensor ""
-    # in different way it treats cases where those flags are simply not given.
-    # [TBD] we must investigate this
-    # for now, set these rules to guarantee a case with no flags is tried as well 
-
     # debug 
     print("")
     print(f"cmd_2: {cmd_2} ")
     print("")
-
-    # Best config Stage_1: {'batch': 4809, 'u_batch': 1161, 'threads': 10, 'gpu_layers': 149}
-    # Best Stage_1 tg tokens/sec: 159.785726
 
     try:
         tokens_per_sec = run_llama_bench_with_csv(cmd_2, metric)
@@ -261,8 +247,6 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         "--ubatch-size"    , str(u_batch),    # (-ub flag) (default 512) 
         "--threads"        , str(threads),    # (-t  flag) (default 2)  
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
-        #"--flash-attn"     , str(flash_attn), # enables Flash Attention, a performance optimization during inference. 
-        #"--override-tensor", str(override_pattern),# enable loading larger tensors to the CPU (saving VRAM from GPU)
         "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
         "-o"               , "csv"            # save temporary .csv file with llama-bench outputs
@@ -286,8 +270,6 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         if override_key != "none":  # in case of "none" option, do not pass the no --override-tensor flag 
             cmd_3 += ["--override-tensor", OVERRIDE_PATTERNS[override_key]] # test few configuration[TBD]maybe run after last optimization  
 
-
-
     # debug
     print("")
     print(f"cmd_3: {cmd_3}")
@@ -301,59 +283,40 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         return 0.0
 
 
-def warmup_until_stable(llama_bench_path, model_path, metric, ngl, threshold, min_runs, max_warmup,n_warmup_tokens):
+def warmup_until_stable(llama_bench_path, model_path, metric, ngl, min_runs, n_warmup_runs, n_warmup_tokens):
     """
     Warm-up doctrine:
-    - Always run at least 3 warmup cycles before checking for stability.
-    - For early runs (i < 3), just collect data—do not compare yet.
-    - From the 4th run onward, compare the current value to the value from 3 runs before.
-      This catches slow, stepped drops caused by mid-benchmark thermal or system events.
-    - If performance drops by more than `threshold` (e.g., 10%) compared to 3 runs prior,
-      increment a `drops` counter.
-    - If `drops` reaches `min_runs`, declare system warmed up and ready.
-    - This doctrine ensures we don’t “exit early” on temporary or noisy values, and are
-      able to handle gradual & small performance drops (i.e. when permance drops happen
-      in the midle of the workload of a 'in loop' llama-bench runs).
+    - Always run at least 4 warmup cycles before checking for stability.
+    - If the user starts with cold-run, the machine will heat up and performance will drop along the way.
+    - Fans turn on, performace recover a bit.
+    - It is essential that the machine enter a ~stead-state operation state.
+    - the best is to set --n-warmup-runs such that the fans turn on for a while
+      so that the hardware reachs close to stead-state opperation.  
     """
 
     history = []
-    drops = 0
+    threads = max_threads # [TBD: set user control to this parameter]
 
     # build cmd warm up 
     cmd_wup = [
         llama_bench_path,
+        "-t", str(threads),  # for warmup, we should try to enforce runing whith max threads 
         "-ngl", str(ngl),
         "--model", model_path,
-        "-r", "2",       # benchmark repetitions
+        "-r", "3",       # benchmark repetitions
         "-n", str(n_warmup_tokens),
         "-p", str(n_warmup_tokens), 
         "-o", "csv"
     ]
 
-    for i in range(max_warmup):
+    if n_warmup_runs < 4:        # in case the user specifies less than 2 warmup runs 
+        n_warmup_runs = min_runs # force a minimum number of warmup runs
+    
+    for i in range(n_warmup_runs):
         performance = run_llama_bench_with_csv(cmd_wup, metric)
         history.append(performance)
         print(f"Warmup {i+1}: {performance:.2f} tok/s")
         
-        if i >= 3:  # Only compare after the third run
-            compare_perf = history[i-3]
-            if performance < compare_perf * (1 - threshold):
-                drops += 1
-            else:
-                drops = 0
-            if drops >= 2: 
-
-                print("")
-                print("##########################################")
-                print("# Consistent Performance drop detected.  #")
-                print("# Your system warmed up.                 #") 
-                print("# Ready to go!                           #")
-                print("##########################################")
-                print("")
-
-                break
-        # For i < 2: do not compare, just accumulate
-
         print("")
         print("Warmup performance history:", history)
         print("")
@@ -469,7 +432,8 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
 
     # 1. llama-server (inference); will be listening at http://127.0.0.1:8080/ in your browser. 
     llama_server_cmd = (
-        f"/path_to/llama-server --model /path_to_model.gguf" 
+        f"{llama_bin_path}/llama-server" 
+        f" --model {model_path}"   # path_to_model.gguf 
         f" -t {best_3['threads']}"
         f" --batch-size {best_3['batch']}"
         f" --ubatch-size {best_3['u_batch']}"
@@ -491,15 +455,15 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
 
     # 2. llama-bench (benchmark for both tg and pp)
     llama_bench_cmd = (
-        f"/path_to/llama-bench"
-        f" --model path_to_model.gguf"
+        f"{llama_bench_path}"
+        f" --model {model_path}"    # path_to_model.gguf
         f" -t {best_3['threads']}"
         f" --batch-size {best_3['batch']}"
         f" --ubatch-size {best_3['u_batch']}"
         f" -ngl {best_3['gpu_layers']}"
         f" --flash-attn {best_2['flash_attn']}"  # in llama-server, --flash-attn is type 'int', accepts <0|1> values.
         #f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"
-        f" -n 128 -p 128 -r 5 --progress "
+        f" -n 128 -p 128 -r 7 --progress "
     )
 
     if best_2['override_tensor'] != "none":

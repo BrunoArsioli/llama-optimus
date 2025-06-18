@@ -50,6 +50,10 @@ def main():
         "if n_warmup_tokens is too large, it can happen that you warmup in the first warmup cycle, and you end " \
         "up not detecting the warmup. ")
     
+    parser.add_argument("--n-warmup-runs", type=int, default=40, help="Maximum warm-up iterations before trials " \
+    "begin (default: 30). To skip warm-up completely, use the --no-warmup flag; Otherwise, there will be a minimum " \
+    "number of warmup runs, which is set with `min_runs=3` in core function definition")
+
     parser.add_argument("--no-warmup", action="store_true", help="Skip the initial system warmup phase before " \
     "optimization (for debugging/testing).")
 
@@ -63,10 +67,6 @@ def main():
     args = parser.parse_args()
 
     # Set paths based on CLI flags, env vars, or prompt user to provide it
-    #llama_bin_path = args.llama_bin if args.llama_bin else os.environ.get("LLAMA_BIN")
-    #llama_bench_path = f"{llama_bin_path}/llama-bench"
-    #model_path = args.model if args.model else os.environ.get("MODEL_PATH")
-
     # Resolve llama_bin_path
     llama_bin_path = (args.llama_bin or os.environ.get("LLAMA_BIN")
         or input("Please, provide the tath to your 'llama.cpp/build/bin' ").strip() )
@@ -138,8 +138,20 @@ def main():
         print("# Starting warmup...  #")
         print("#######################")
         print("")
+
+        # in case n_warmup_runs is set to < 4, warn about the minimum number of earmup runs
+        if args.n_warmup_runs < 4:
+            print("")
+            print("#########################################################################")
+            print("# Setting a minimum of 4 warmup runs.                                   #")
+            print('# For no warmup, pass the --no-warmup flag during llama-optimus launch  #')
+            print("#########################################################################")
+            print("")
+
+        # launch warmup
         warmup_until_stable(llama_bench_path=llama_bench_path, model_path=model_path, metric=args.metric, 
-                            ngl=max_ngl_wup, threshold=0.06, min_runs=3, max_warmup=30,n_warmup_tokens=args.n_warmup_tokens)
+                            ngl=max_ngl_wup, min_runs=4, n_warmup_runs=args.n_warmup_runs,
+                            n_warmup_tokens=args.n_warmup_tokens)
 
     print("")
     print("##################################")

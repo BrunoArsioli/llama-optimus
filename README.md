@@ -112,7 +112,7 @@ Trial 0 finished with value: 72.43 and parameters: {'batch': 32, 'flash_attn': 1
 
 Meaning, if you run a llama-server with flags: --batchh-size 32 --flash-attn --ubatch-size 8 --threads 11 -ngl 97 ; you will get about 72.43 tokens/s in token generation. 
 
-What is a **repetition** or `-r` ?
+What is a **repetition**, or `-r` ?
 
 The result we got from Trial 0 (**72.43 tokens/s**) is a mean value; It was calculated by running this same **Trial 0** configuration `-r` times. 
 
@@ -155,19 +155,29 @@ llama-optimus --trials 25 -r 3 --metric tg
 **Common arguments:**
 
 * `--llama-bin`  Path to your llama.cpp `build/bin` directory (or set `$LLAMA_BIN`)
+
 * `--model`      Path to your `.gguf` model file (or set `$MODEL_PATH`)
+
 * `--trials`   Number of optimization trials (default: 35)
+
 * `--metric`   Which throughput metric to optimize:
   `tg` = token generation speed,
   `pp` = prompt processing speed,
   `mean` = average of both
+
 * `-r` / `--repeat` How many repetitions per configuration (default: 2; use 1 for quick/dirty, 5 for robust)
+
 * `--n-tokens`  Number of tokens to use for benchmarking. Larger = more stable measurements (default: 60).
+
 * `--override-mode`  How to treat --override-tensor (default: scan):
     `none`: ignore this flag (do not scan over override-tensor space)
     `scan`: grid search all preset patterns (from override_patterns.py)
     `custom`: ([TBD]future) user-defined override tensor patterns
+
 * `--n-warmup-tokens` Number of tokens passed to llama-bench during each warmup loop
+
+* `--warmup-runs`  Max warm-up iterations before optimisation (default: 30; minimum is 4; For no warmup, use the `--no-warmup` flag )
+
 * `--no-warmup` Skip warmup phase (for test/debug purpose)
 
 
@@ -204,7 +214,7 @@ llama-optimus --help
 
 - You can **abort Trial** at any time, and still follow the best result/configuration achieved so far. 
 
-**Notes:** llama-optimus ensures your system is warmed up before starting optimization, to avoid misleading cold-start results (i.e. cold-starts lead to larger tokens/s counts; This a source of confugion for the community, because cold-start results are usually reported as "I just found a new configuration which improved tokens/s in 20%", which is misleading).
+**Notes:** llama-optimus will try to ensure your system is warmed up before starting optimization, to avoid misleading cold-start results (i.e. cold-starts lead to larger tokens/s counts; This a source of confusion for the community, because cold-start results are usually reported as "found a new configuration which improved tokens/s in xx%", which is misleading when comparing cold-start vs. warmeedup numbers).
 
 ---
 
@@ -236,12 +246,12 @@ llama-bench --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1
 
 ## Tip 
 
-The default values for prompt processing `-p 50` and prompt generation `-n 50` gives fast trials.
+The default values for prompt processing `-p 128` and prompt generation `-n 128` gives fast trials.
 
 The user can control this via `--n-tokens` parameter, which can be passed to llama-optimus during launch: lead to stable and robust results 
 
 ```bash
-llama-optimus --n-tokens 128
+llama-optimus --n-tokens 256
 ```
 
 Later, for a stable final score, re-run llama-bench with the best flags found (don't forget to warm-up first):
@@ -249,7 +259,7 @@ Later, for a stable final score, re-run llama-bench with the best flags found (d
 llama-bench ... -p 512 -n 256 -r 5 --progress
 ```
 
-E.g. of launching a server with optimized flags will look like this:
+E.g. of launch a server with optimized flags will look like this:
 ```bash
 llama-server --model my_path_to/model.gguf -t 4 --batch-size 4096 --ubatch-size 1024 -ngl 63 --flash-attn  --override-tensor "blk\.(6|7|8|9|[1-9][0-9]+)\.ffn_.*_exps\.=CPU"
 ````
@@ -267,7 +277,15 @@ If you start Trials (Stage 1 or 2) with “cold” hardware, the “best” conf
 For this reason, llama-optimus warms-up before scaning the parameter space with its Bayesian TPESampler. 
 
 **Keep in mind**: never trust cold-start numbers. 
-Warming up the system and waiting for stable, “saturated” (worst-case, real-world) performance will make your optimizer results much more robust and grounded to real use cases.
+Warming up the system and waiting for stable, “saturated” (real-world) performance will make your optimizer results much more robust and grounded to real use cases.
+
+Make sure your fans turn on with the default number of warmup runs (default: 40). 
+
+If you need more (or less) runs to warmup your system, consider passing --n-warmup-runs flag during llama-optimus launch:
+
+```bash
+llama-optimus --n-warmup-runs 50
+````
 
 ## 🛟 Troubleshooting 🛟
 
