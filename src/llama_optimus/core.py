@@ -437,7 +437,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     # 1. llama-server (inference); will be listening at http://127.0.0.1:8080/ in your browser. 
     llama_server_cmd = (
         f"{llama_bin_path}/llama-server" 
-        f"--model {model_path}"   # path_to_model.gguf 
+        f" --model {model_path}"   # path_to_model.gguf 
         f" -t {best_3['threads']}"
         f" --batch-size {best_3['batch']}"
         f" --ubatch-size {best_3['u_batch']}"
