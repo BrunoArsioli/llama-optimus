@@ -66,7 +66,7 @@ def run_llama_bench_with_csv(cmd, metric):
         float: The value of the selected metric, or 0.0 if it cannot be extracted.
     """    
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=420)
     if result.returncode != 0:
         raise RuntimeError(result.stderr)
     
