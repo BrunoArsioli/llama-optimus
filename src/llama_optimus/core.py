@@ -283,7 +283,7 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         return 0.0
 
 
-def warmup_until_stable(llama_bench_path, model_path, metric, ngl, min_runs, n_warmup_runs, n_warmup_tokens):
+def warmup_until_stable(llama_bench_path, model_path, metric, ngl, min_runs, n_warmup_runs, n_warmup_tokens, max_threads):
     """
     Warm-up doctrine:
     - Always run at least 4 warmup cycles before checking for stability.
@@ -308,6 +308,10 @@ def warmup_until_stable(llama_bench_path, model_path, metric, ngl, min_runs, n_w
         "-p", str(n_warmup_tokens), 
         "-o", "csv"
     ]
+
+    print("")
+    print(f"warmup cmd: {cmd_wup}")
+    print("")
 
     if n_warmup_runs < 4:        # in case the user specifies less than 2 warmup runs 
         n_warmup_runs = min_runs # force a minimum number of warmup runs

@@ -151,7 +151,7 @@ def main():
         # launch warmup
         warmup_until_stable(llama_bench_path=llama_bench_path, model_path=model_path, metric=args.metric, 
                             ngl=max_ngl_wup, min_runs=4, n_warmup_runs=args.n_warmup_runs,
-                            n_warmup_tokens=args.n_warmup_tokens)
+                            n_warmup_tokens=args.n_warmup_tokens, max_threads=max_threads)
 
     print("")
     print("##################################")
