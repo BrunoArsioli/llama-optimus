@@ -43,7 +43,7 @@ def estimate_max_ngl(llama_bench_path, model_path, min_ngl=0, max_ngl=SEARCH_SPA
             "-o", "csv"
         ]
         try:
-            subprocess.run(cmd, capture_output=True, text=True, timeout=80, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, timeout=420, check=True)
             low = mid  # success → try higher
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             high = mid - 1  # failure → reduce range
@@ -66,7 +66,7 @@ def run_llama_bench_with_csv(cmd, metric):
         float: The value of the selected metric, or 0.0 if it cannot be extracted.
     """    
 
-    result = subprocess.run(cmd, capture_output=True, text=True, time=420)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     if result.returncode != 0:
         raise RuntimeError(result.stderr)
     
@@ -433,7 +433,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     # 1. llama-server (inference); will be listening at http://127.0.0.1:8080/ in your browser. 
     llama_server_cmd = (
         f"{llama_bin_path}/llama-server" 
-        f" --model {model_path}"   # path_to_model.gguf 
+        f"--model {model_path}"   # path_to_model.gguf 
         f" -t {best_3['threads']}"
         f" --batch-size {best_3['batch']}"
         f" --ubatch-size {best_3['u_batch']}"
