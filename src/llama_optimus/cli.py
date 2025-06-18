@@ -36,7 +36,7 @@ def main():
     parser.add_argument("--ngl-max",type=int, help="Maximum number of model layers for -ngl "
         "(skip estimation if provided; estimation runs by default).")
 
-    parser.add_argument("--repeat", "-r", type=int, default=2, help="Number of llama-bench runs per configuration "
+    parser.add_argument("--repeat", "-r", type=int, default=3, help="Number of llama-bench runs per configuration "
         "(higher = more robust, lower = faster; default: 2, for quick assessment: 1)")
 
     parser.add_argument("--n-tokens", type=int, default=128, help="Number of tokens used in llama-bench to test " \
@@ -62,13 +62,29 @@ def main():
     
     args = parser.parse_args()
 
-    # Set paths based on CLI flags or env vars
-    llama_bin_path = args.llama_bin if args.llama_bin else os.environ.get("LLAMA_BIN")
-    llama_bench_path = f"{llama_bin_path}/llama-bench"
-    model_path = args.model if args.model else os.environ.get("MODEL_PATH")
+    # Set paths based on CLI flags, env vars, or prompt user to provide it
+    #llama_bin_path = args.llama_bin if args.llama_bin else os.environ.get("LLAMA_BIN")
+    #llama_bench_path = f"{llama_bin_path}/llama-bench"
+    #model_path = args.model if args.model else os.environ.get("MODEL_PATH")
 
-    if llama_bin_path is None or model_path is None:
-        print("ERROR: LLAMA_BIN or MODEL_PATH not set. Set via environment variable or pass via CLI flags.", file=sys.stderr)
+    # Resolve llama_bin_path
+    llama_bin_path = (args.llama_bin or os.environ.get("LLAMA_BIN")
+        or input("Please, provide the tath to your 'llama.cpp/build/bin' ").strip() )
+
+    # Build llama_bencch_path
+    llama_bench_path = f"{llama_bin_path}/llama-bench"
+
+    # Resolve model_path
+    model_path = (args.model or os.environ.get("MODEL_PATH")
+        or input("Please, provide the path to your 'ai_model.gguf' ").strip() )
+
+    # Quick check if paths are set. ERROR msg if None or empty.
+    if llama_bin_path is (None or '') or model_path is (None or ''):
+        print("ERROR: LLAMA_BIN or MODEL_PATH not set. Set via environment variable, " \
+        "pass via CLI flags, or provide paths just after launching llama-optimus." \
+        "Go to your terminal, navigate to your_path_to/llama.cpp/buil/bin and type 'pwd' to resolve the entire path." \
+        "Go to your terminal, navigate to your_path_to_AI_models/ and type 'pwd' to resolve the path. " \
+        "Note: you must pass /path_to_model/model_name.ggfu; e.g. your_path_model/gemma3_12B.gguf .", file=sys.stderr)
         sys.exit(1)
 
     if not os.path.isfile(llama_bench_path):
