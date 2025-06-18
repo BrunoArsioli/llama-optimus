@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llama-optimus"
-version = "0.1.5"
+version = "0.1.6"
 description = "Automatic optimization of llama.cpp inference flags using Bayesian optimization (Optuna)"
 authors = [
   { name = "Bruno Arsioli", email = "YOUR_EMAIL@yourdomain.com" }
