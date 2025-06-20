@@ -34,15 +34,19 @@
 - **Built on:** [Optuna](https://optuna.org/) for hyperparameter optimization and [llama.cpp](https://github.com/ggerganov/llama.cpp) for inference.
 - Adapts to Apple Silicon, Linux x86, and NVIDIA GPU systems
 - Outputs copy-paste-ready commands for `llama-server` and `llama-bench`
-- **Quick & robust benchmarks:** Controlable via `-repeat` and `--n-tokens` flags which set the number of llama-bench repetitions per trial, and the number of tokes used when estimating tokens/s velocity in prompt processing (pp) and text generation (tg). 
+- **Quick & robust benchmarks:** Controllable via `-repeat` and `--n-tokens` flags which set the number of llama-bench repetitions per trial, and the number of tokens used when estimating tokens/s velocity in prompt processing (pp) and text generation (tg). 
 
 ---
 
 ## Requirements
 
 - Python 3.10+  
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) (built, with `llama-bench` present in `/build/bin/`)
+
+- **Latest** [llama.cpp](https://github.com/ggerganov/llama.cpp) (**release version > 3667** : which incorporated --no-warmup flag to llama-bench : b5706) 
+
 - At least one GGUF model file
+
+- **Make sure** to have installed the latest version of llamma.cpp  (**release version > 3667**)
 
 ---
 
@@ -110,7 +114,7 @@ e.g.: When running `llama-optimus` you will see the output for every trial, like
 
 Trial 0 finished with value: 72.43 and parameters: {'batch': 32, 'flash_attn': 1, 'u_batch': 8, 'threads': 11, 'gpu_layers': 97}. Best is trial 0 with value: 72.43 
 
-Meaning, if you run a llama-server with flags: --batchh-size 32 --flash-attn --ubatch-size 8 --threads 11 -ngl 97 ; you will get about 72.43 tokens/s in token generation. 
+Meaning, if you run a llama-server with flags: --batch-size 32 --flash-attn --ubatch-size 8 --threads 11 -ngl 97 ; you will get about 72.43 tokens/s in token generation. 
 
 What is a **repetition**, or `-r` ?
 
@@ -118,7 +122,7 @@ The result we got from Trial 0 (**72.43 tokens/s**) is a mean value; It was calc
 
 Why do we need to **repeat** runs before calculating the result (tokens/s) ?
 
-That is because, everytime you run `llama-bench` (the llama.cpp benchmark) you get a sligtly different estimate for the tokens/s metric. There is a degree of variability in the results; We calculate a mean value to base our final decision on more reliable/robust results.  
+That is because, everytime you run `llama-bench` (the llama.cpp benchmark) you get a slightly different estimate for the tokens/s metric. There is a degree of variability in the results; We calculate a mean value to base our final decision on more reliable/robust results.  
 
 ### Option B: Pass as CLI flags
 
@@ -274,7 +278,7 @@ After several runs, temperature rises or RAM usage accumulates, causing the syst
 
 If you start Trials (Stage 1 or 2) with “cold” hardware, the “best” config may just be lucky—chosen in a period of turbo clocks, giving misleading results.
 
-For this reason, llama-optimus warms-up before scaning the parameter space with its Bayesian TPESampler. 
+For this reason, llama-optimus warms-up before scanning the parameter space with its Bayesian TPESampler. 
 
 **Keep in mind**: never trust cold-start numbers. 
 Warming up the system and waiting for stable, “saturated” (real-world) performance will make your optimizer results much more robust and grounded to real use cases.

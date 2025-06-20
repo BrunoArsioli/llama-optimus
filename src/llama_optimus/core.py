@@ -1,7 +1,6 @@
 # core.py
 # Core functions for llama-optimus optimization
 
-import subprocess
 import re
 import optuna
 import os
@@ -85,16 +84,16 @@ def run_llama_bench_with_csv(cmd, metric):
 
     if metric == "tg":
         tg_rows = df[df["n_gen"] > 0]
-        if not tg_rows.empty: # writes only if tg_row is not empty 
+        if not tg_rows.empty: # write only if tg_row is not empty 
             metric_value = float(tg_rows["avg_ts"].iloc[0])
     elif metric == "pp":
         pp_rows = df[df["n_prompt"] > 0]
-        if not pp_rows.empty: # writes only if pp_row is not empty 
+        if not pp_rows.empty: # write only if pp_row is not empty 
             metric_value = float(pp_rows["avg_ts"].iloc[0])
     elif metric == "mean":
         tg_rows = df[df["n_gen"] > 0]
         pp_rows = df[df["n_prompt"] > 0]
-        if not tg_rows.empty and not pp_rows.empty: # writes only if tg_ and pp_row are not empty 
+        if not tg_rows.empty and not pp_rows.empty: # write only if tg_ and pp_row are not empty 
             metric_value = 0.5 * (float(tg_rows["avg_ts"].iloc[0]) + float(pp_rows["avg_ts"].iloc[0]))
     return metric_value
 
@@ -118,12 +117,14 @@ def objective_1(trial, n_tokens, metric, repeat, llama_bench_path, model_path):
     threads      = trial.suggest_int('threads', SEARCH_SPACE['threads']['low'], SEARCH_SPACE['threads']['high'])
     gpu_layers   = trial.suggest_int('gpu_layers', SEARCH_SPACE['gpu_layers']['low'], SEARCH_SPACE['gpu_layers']['high'])
 
-    # ----------  constraint check [under development] -------------
+    # ----------  constraint check [under development/testing] -------------
     # llama.cpp usually requires batch_size >= ubatch_size; 
-    # most user report lower performance if constrain is violated.  Prune such trials early.
+    # most users report lower performance if constrain is violated.  Prune such trials early.
+    # drawback: Opitimization function never learns about the batch_size < ubatch_size space 
+    # --> this could be a problem for the optimization.
     #if batch < u_batch:
     #    raise optuna.TrialPruned()    # skip invalid trial
-
+    # 
 
     # Build llama-bench command 
     cmd_1 = [
@@ -145,7 +146,7 @@ def objective_1(trial, n_tokens, metric, repeat, llama_bench_path, model_path):
     if metric in ("tg"):
         cmd_1 += ["-n", str(n_tokens), "-p", str(0)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
     if metric in ("pp"):
-        cmd_1 += ["-p", str(2*n_tokens), "-n", str(0)]  # tokens to process; Add "zero" to -n or -p to disable it.  
+        cmd_1 += ["-p", str(2*n_tokens), "-n", str(0)]  # tokens to process; Add 0 to -n or -p to disable it.  
     if metric in ("mean"):
         cmd_1 += ["-n", str(n_tokens), "-p", str(2*n_tokens)]  # tokens to generate and process 
 
@@ -175,7 +176,7 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
     Returns:
         float: The throughput value to maximize (tokens/sec).
     """
-    # for degug
+    # for debug
     print(f"Running objective_2 with batch={batch}, u_batch={u_batch}, threads={threads}, gpu_layers={gpu_layers}")
 
 
@@ -203,14 +204,14 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
     # remove flash-attn flag in case --flash-attn is 0 ; avoid possible misbehaviour in case `--flash-attn 0  != "" `
     flash_attn   = trial.suggest_categorical('flash_attn', SEARCH_SPACE['flash_attn'])
     if flash_attn == 1:  # in case of "0" option, do not pass the --flash-attn flag 
-        cmd_2 += ["--flash-attn", str(flash_attn)] # test few configuration[TBD]maybe run after last optimization  
+        cmd_2 += ["--flash-attn", str(flash_attn)]  
 
     # include trials over --override-tensor only if "scan" is passes to args.override_tensor
-    # and, in case override_key == "none", the override-tensor flag is not inserted in cmd_2
+    # and, if override_key == "none", the override-tensor flag is not inserted in cmd_2
     if override_mode == "scan":
         override_key = trial.suggest_categorical('override_tensor', list(OVERRIDE_PATTERNS.keys()))
         if override_key != "none":  # in case of "none" option, do not pass the no --override-tensor flag 
-            cmd_2 += ["--override-tensor", OVERRIDE_PATTERNS[override_key]] # test few configuration[TBD]maybe run after last optimization  
+            cmd_2 += ["--override-tensor", OVERRIDE_PATTERNS[override_key]]   
 
     # debug 
     print("")
@@ -236,7 +237,7 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         trial (optuna.trial.Trial): The current Optuna trial object.
         metric (str): The performance metric to optimize ("tg", "pp", or "mean").
         repeat (int): Number of llama-bench repetitions for every trial; used to calculate robust <token/s> value
-        overrive_tensor
+        override_tensor
         flash_attn
     Returns:
         float: The throughput value to maximize (tokens/sec).
@@ -269,17 +270,17 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         cmd_3 += ["-n", str(n_tokens), "-p", str(2*n_tokens)]  # tokens to generate and process 
 
 
-    # remove flash-attn flag in case --flash-attn is 0 ; avoid possible misbehaviour in case `--flash-attn 0  != "" `
+    # remove flash-attn flag in case --flash-attn is 0 `
     flash_attn   = trial.suggest_categorical('flash_attn', SEARCH_SPACE['flash_attn'])
     if flash_attn == 1:  # in case of "0" option, do not pass the --flash-attn flag 
-        cmd_3 += ["--flash-attn", str(flash_attn)] # test few configuration[TBD]maybe run after last optimization  
+        cmd_3 += ["--flash-attn", str(flash_attn)]  
 
     # include trials over --override-tensor only if "scan" is passes to args.override_tensor
     # in case override_key == "none", the override-tensor flag is not inserted in cmd_3
     if override_mode == "scan":
         override_key = trial.suggest_categorical('override_tensor', list(OVERRIDE_PATTERNS.keys()))
         if override_key != "none":  # in case of "none" option, do not pass the no --override-tensor flag 
-            cmd_3 += ["--override-tensor", OVERRIDE_PATTERNS[override_key]] # test few configuration[TBD]maybe run after last optimization  
+            cmd_3 += ["--override-tensor", OVERRIDE_PATTERNS[override_key]]   
 
     # debug
     print("")
@@ -299,10 +300,10 @@ def warmup_until_stable(llama_bench_path, model_path, metric, ngl, min_runs, n_w
     Warm-up doctrine:
     - Always run at least 4 warmup cycles before checking for stability.
     - If the user starts with cold-run, the machine will heat up and performance will drop along the way.
-    - Fans turn on, performace recover a bit.
-    - It is essential that the machine enter a ~stead-state operation state.
+    - Fans turn on, performance recover a bit.
+    - It is essential that the machine enter a ~steady-state operation state.
     - the best is to set --n-warmup-runs such that the fans turn on for a while
-      so that the hardware reachs close to stead-state opperation.  
+      so that the hardware reachs close to steady-state operation.  
     """
 
     history = []
@@ -365,7 +366,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print("############################################################")
     print("")
 
-    # TRIALS : stage_1
+    # TRIALS: FIRST STAGE
     sampler = TPESampler(multivariate=True)  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
     study_1 = optuna.create_study(direction="maximize", sampler=sampler)
     # use lambda to inject metric, repeat ...  
@@ -386,7 +387,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print("")
 
 
-    # TRIALS : stage_2
+    # TRIALS: SECOND STAGE
     if override_mode == "scan": 
         n_override = len(OVERRIDE_PATTERNS)  # 
         n_trials_2 = n_override * 2  # to cover all possibilities, since flash_attn: <0|1>
@@ -424,7 +425,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print("#######################################")
     print("")
 
-    # TRIALS : stage_3
+    # TRIALS : THIRD STAGE 
     sampler_3 = TPESampler(multivariate=True)  # Others: "random": RandomSampler(); "cmaes": CmaEsSampler(),
     study_3 = optuna.create_study(direction="maximize", sampler=sampler_3)
     # use lambda to inject metric, repeat ...  
@@ -499,7 +500,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     llama_bench_cmd_default = (
         f"{llama_bench_path}"
         f" --model {model_path}"    # path_to_model.gguf
-        f" -n 128 -p 256 -r 6 --no-warmup --progress " # no-warmup in llama-bench; this is not the no-warmup from llama-optimus
+        f" -n 128 -p 256 -r 6 --no-warmup --progress " # internal llama-bench --no-warmup; unrelated to llama-optimus warm-up flag
     )
 
 
@@ -519,12 +520,16 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print("########################################################")
     print("# Compare your previous results with NON-OPTIMIZED case#")
     print("# Let's run the following line on terminal:            #")
+    print("#                                                      #")
+    print("# Look for results in column 't/s' (tokens/s)          #")
+    print("# row tg128 --> reports on token  generation speed     #")
+    print("# row pp256 --> reports on prompt processing speed     #")
     print("########################################################")
     print("")
     print(f"{llama_bench_cmd_default}")
     print("")
 
-    # launch optimized bench
+    # launch non-optimized (default) bench
     subprocess.run(shlex.split(llama_bench_cmd_default), check=True)
 
     # [TBD] add % of improvement 

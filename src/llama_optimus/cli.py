@@ -1,15 +1,12 @@
-# llama_optimus/cli.,py
+# llama_optimus/cli.py
 # handle parsing, validation, and env setup
 
 import argparse, os, sys
-from .core import run_optimization, estimate_max_ngl, SEARCH_SPACE, warmup_until_stable
+from .core import run_optimization, estimate_max_ngl, warmup_until_stable
 from .override_patterns import OVERRIDE_PATTERNS   
 from .search_space import SEARCH_SPACE, max_threads 
 
 from llama_optimus import __version__
-
-# count number of available cpu cores
-#max_threads = os.cpu_count()
 
 
 def main():
@@ -37,7 +34,7 @@ def main():
         "(skip estimation if provided; estimation runs by default).")
 
     parser.add_argument("--repeat", "-r", type=int, default=3, help="Number of llama-bench runs per configuration "
-        "(higher = more robust, lower = faster; default: 2, for quick assessment: 1)")
+        "(higher = more robust, lower = faster; for quick assessment: 1)")
 
     parser.add_argument("--n-tokens", type=int, default=192, help="Number of tokens used in llama-bench to test " \
         "velocity of prompt processing and text generation. Keep in mind there is large variability in tok/s outputs. " \
@@ -51,7 +48,7 @@ def main():
         "up not detecting the warmup. ")
     
     parser.add_argument("--n-warmup-runs", type=int, default=35, help="Maximum warm-up iterations before trials " \
-    "begin (default: 30). To skip warm-up completely, use the --no-warmup flag; Otherwise, there will be a minimum " \
+    "begin. To skip warm-up completely, use the --no-warmup flag; Otherwise, there will be a minimum " \
     "number of warmup runs, which is set with `min_runs=3` in core function definition")
 
     parser.add_argument("--no-warmup", action="store_true", help="Skip the initial system warmup phase before " \
@@ -69,9 +66,9 @@ def main():
     # Set paths based on CLI flags, env vars, or prompt user to provide it
     # Resolve llama_bin_path
     llama_bin_path = (args.llama_bin or os.environ.get("LLAMA_BIN")
-        or input("Please, provide the tath to your 'llama.cpp/build/bin' ").strip() )
+        or input("Please, provide the path to your 'llama.cpp/build/bin' ").strip() )
 
-    # Build llama_bencch_path
+    # Build llama_bench_path
     llama_bench_path = f"{llama_bin_path}/llama-bench"
 
     # Resolve model_path
@@ -79,12 +76,12 @@ def main():
         or input("Please, provide the path to your 'ai_model.gguf' ").strip() )
 
     # Quick check if paths are set. ERROR msg if None or empty.
-    if llama_bin_path is (None or '') or model_path is (None or ''):
+    if not llama_bin_path or not model_path:
         print("ERROR: LLAMA_BIN or MODEL_PATH not set. Set via environment variable, " \
-        "pass via CLI flags, or provide paths just after launching llama-optimus." \
-        "Go to your terminal, navigate to your_path_to/llama.cpp/buil/bin and type 'pwd' to resolve the entire path." \
+        "pass via CLI flags, or provide paths just after launching llama-optimus. " \
+        "Go to your terminal, navigate to your_path_to/llama.cpp/buil/bin and type 'pwd' to resolve the entire path. " \
         "Go to your terminal, navigate to your_path_to_AI_models/ and type 'pwd' to resolve the path. " \
-        "Note: you must pass /path_to_model/model_name.ggfu; e.g. your_path_model/gemma3_12B.gguf .", file=sys.stderr)
+        "Note: you must pass /path_to_model/model_name.gguf; e.g. your_path_model/gemma3_12B.gguf .", file=sys.stderr)
         sys.exit(1)
 
     if not os.path.isfile(llama_bench_path):
@@ -128,9 +125,9 @@ def main():
     
     if args.no_warmup:
         print("")
-        print("##############################################")
-        print("# !!!Optimization running without warmup!!!  #")
-        print("##############################################")
+        print("#####################################################")
+        print("# !!!Optimization running without system warmup!!!  #")
+        print("#####################################################")
         print("")
     else: 
         print("")
@@ -139,7 +136,7 @@ def main():
         print("#######################")
         print("")
 
-        # in case n_warmup_runs is set to < 4, warn about the minimum number of earmup runs
+        # in case n_warmup_runs is set to < 4, warn about the minimum number of warmup runs
         if args.n_warmup_runs < 4:
             print("")
             print("#########################################################################")
@@ -166,3 +163,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+    

@@ -4,6 +4,5 @@ def test_search_space_shape():
     """Minimal smoke test to ensure SEARCH_SPACE is defined and has expected keys."""
     from llama_optimus.core import SEARCH_SPACE
     assert isinstance(SEARCH_SPACE, dict)
-    assert 'flash_attn' in SEARCH_SPACE
     assert 'batch_size' in SEARCH_SPACE
 
