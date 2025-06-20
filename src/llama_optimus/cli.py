@@ -39,7 +39,7 @@ def main():
     parser.add_argument("--repeat", "-r", type=int, default=3, help="Number of llama-bench runs per configuration "
         "(higher = more robust, lower = faster; default: 2, for quick assessment: 1)")
 
-    parser.add_argument("--n-tokens", type=int, default=128, help="Number of tokens used in llama-bench to test " \
+    parser.add_argument("--n-tokens", type=int, default=192, help="Number of tokens used in llama-bench to test " \
         "velocity of prompt processing and text generation. Keep in mind there is large variability in tok/s outputs. " \
         "If n_tokens is too low, uncertainty takes over, optimization may suffer. Still, if you need to lower it, " \
         "try to operate with n_tokens > 70 and --repeat 3. " \
@@ -50,7 +50,7 @@ def main():
         "if n_warmup_tokens is too large, it can happen that you warmup in the first warmup cycle, and you end " \
         "up not detecting the warmup. ")
     
-    parser.add_argument("--n-warmup-runs", type=int, default=40, help="Maximum warm-up iterations before trials " \
+    parser.add_argument("--n-warmup-runs", type=int, default=35, help="Maximum warm-up iterations before trials " \
     "begin (default: 30). To skip warm-up completely, use the --no-warmup flag; Otherwise, there will be a minimum " \
     "number of warmup runs, which is set with `min_runs=3` in core function definition")
 

@@ -136,16 +136,18 @@ def objective_1(trial, n_tokens, metric, repeat, llama_bench_path, model_path):
         "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
         "-o"               , "csv",           # save temporary .csv file with llama-bench outputs
-        "--progress"
+        "--no-warmup"     # deactivate internal llama-bench warmup
     ]
     # note1: memory mapping is now set by default. Instead, need to add --no-map flag. 
     # note2: use "-r 5" for more robust results (mean value calculated over 5 llama-bench runs); Use "-r 1" for quick assessment 
 
     # Add task-specific flags
-    if metric in ("tg", "mean"):
-        cmd_1 += ["-n", str(n_tokens)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
-    if metric in ("pp", "mean"):
-        cmd_1 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
+    if metric in ("tg"):
+        cmd_1 += ["-n", str(n_tokens), "-p", str(0)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
+    if metric in ("pp"):
+        cmd_1 += ["-p", str(2*n_tokens), "-n", str(0)]  # tokens to process; Add "zero" to -n or -p to disable it.  
+    if metric in ("mean"):
+        cmd_1 += ["-n", str(n_tokens), "-p", str(2*n_tokens)]  # tokens to generate and process 
 
     # debug
     print("")
@@ -186,14 +188,17 @@ def objective_2(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
         "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
-        "-o"               , "csv"            # save temporary .csv file with llama-bench outputs
+        "-o"               , "csv",           # save temporary .csv file with llama-bench outputs
+        "--no-warmup"     # deactivate internal llama-bench warmup
     ]
 
     # Add task-specific flags
-    if metric in ("tg", "mean"):
-        cmd_2 += ["-n", str(n_tokens)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
-    if metric in ("pp", "mean"):
-        cmd_2 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
+    if metric in ("tg"):
+        cmd_2 += ["-n", str(n_tokens), "-p", str(0)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
+    if metric in ("pp"):
+        cmd_2 += ["-p", str(2*n_tokens), "-n", str(0)]  # tokens to process; Add "zero" to -n or -p to disable it.  
+    if metric in ("mean"):
+        cmd_2 += ["-n", str(n_tokens), "-p", str(2*n_tokens)]  # tokens to generate and process 
 
     # remove flash-attn flag in case --flash-attn is 0 ; avoid possible misbehaviour in case `--flash-attn 0  != "" `
     flash_attn   = trial.suggest_categorical('flash_attn', SEARCH_SPACE['flash_attn'])
@@ -251,14 +256,18 @@ def objective_3(trial, n_tokens, metric, repeat, llama_bench_path, model_path, o
         "-ngl"             , str(gpu_layers), # (-ngl or --n-gpu-layers flag)
         "--model"          , model_path,      # 
         "-r"               , str(repeat),     # number of benchmark runs/repetitions for each configuration; mean value and std calculated from it 
-        "-o"               , "csv"            # save temporary .csv file with llama-bench outputs
+        "-o"               , "csv",           # save temporary .csv file with llama-bench outputs
+        "--no-warmup"     # deactivate internal llama-bench warmup
     ]
 
     # Add task-specific flags
-    if metric in ("tg", "mean"):
-        cmd_3 += ["-n", str(n_tokens)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
-    if metric in ("pp", "mean"):
-        cmd_3 += ["-p", str(n_tokens)]  # tokens to process (larger value improve final statistics, i.e. lower std in tok/s)
+    if metric in ("tg"):
+        cmd_3 += ["-n", str(n_tokens), "-p", str(0)]  # tokens to generate (larger value improve final statistics, i.e. lower std in tok/s)
+    if metric in ("pp"):
+        cmd_3 += ["-p", str(2*n_tokens), "-n", str(0)]  # tokens to process; Add "zero" to -n or -p to disable it.  
+    if metric in ("mean"):
+        cmd_3 += ["-n", str(n_tokens), "-p", str(2*n_tokens)]  # tokens to generate and process 
+
 
     # remove flash-attn flag in case --flash-attn is 0 ; avoid possible misbehaviour in case `--flash-attn 0  != "" `
     flash_attn   = trial.suggest_categorical('flash_attn', SEARCH_SPACE['flash_attn'])
@@ -479,7 +488,7 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         f" -ngl {best_3['gpu_layers']}"
         f" --flash-attn {best_2['flash_attn']}"  # in llama-server, --flash-attn is type 'int', accepts <0|1> values.
         #f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"
-        f" -n 128 -p 256 -r 6 --progress "
+        f" -n 128 -p 256 -r 6 --no-warmup --progress "
     )
 
     if best_2['override_tensor'] != "none":
@@ -490,13 +499,13 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     llama_bench_cmd_default = (
         f"{llama_bench_path}"
         f" --model {model_path}"    # path_to_model.gguf
-        f" -n 128 -p 256 -r 6 --progress "
+        f" -n 128 -p 256 -r 6 --no-warmup --progress " # no-warmup in llama-bench; this is not the no-warmup from llama-optimus
     )
 
 
     print("########################################################")
-    print("# You can now benchmark your optimized configuration   #")
-    print('# Jus run the following line on terminal:              #')
+    print("# Benchmarking your OPTIMIZED configuration            #")
+    print("# Let's run the following line on terminal:            #")
     print("########################################################")
     print("")
     print(f"{llama_bench_cmd}")
@@ -508,8 +517,8 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
 
     print("")
     print("########################################################")
-    print("# Compare you previous results with non-optimized case #")
-    print('# Just run the following line on terminal:             #')
+    print("# Compare your previous results with NON-OPTIMIZED case#")
+    print("# Let's run the following line on terminal:            #")
     print("########################################################")
     print("")
     print(f"{llama_bench_cmd_default}")
