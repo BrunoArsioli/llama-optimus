@@ -8,6 +8,8 @@ import os
 import shutil
 import pandas as pd 
 import tempfile
+import subprocess
+import shlex
 from optuna.samplers import TPESampler
 from optuna.samplers import GridSampler
 from .override_patterns import OVERRIDE_PATTERNS   
@@ -436,8 +438,10 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
 
     # 1. llama-server (inference); will be listening at http://127.0.0.1:8080/ in your browser. 
     llama_server_cmd = (
-        f"{llama_bin_path}/llama-server" 
-        f" --model {model_path}"   # path_to_model.gguf 
+        #f"{llama_bin_path}/llama-server" 
+        #f" --model {model_path}"   # path_to_model.gguf 
+        f" $LLAMA_BIN/llama-server"
+        f" --model $MODEL"
         f" -t {best_3['threads']}"
         f" --batch-size {best_3['batch']}"
         f" --ubatch-size {best_3['u_batch']}"
@@ -453,9 +457,17 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         llama_server_cmd += f" --flash-attn "    
 
     print("")
-    print("# For optimal inference, run:")
+    print("###################################################################")
+    print("# You can now launch an optimized llama-server.                   #")
+    print("# just run next lines in your terminal:                           #")
+    print("###################################################################")
+    print("")
+    print(f"LLAMA_BIN={llama_bin_path}")
+    print(f"MODEL={model_path}")
+    print("")
     print(f"{llama_server_cmd}")
     print("")
+
 
     # 2. llama-bench (benchmark for both tg and pp)
     llama_bench_cmd = (
@@ -467,15 +479,45 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
         f" -ngl {best_3['gpu_layers']}"
         f" --flash-attn {best_2['flash_attn']}"  # in llama-server, --flash-attn is type 'int', accepts <0|1> values.
         #f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"
-        f" -n 128 -p 128 -r 7 --progress "
+        f" -n 128 -p 256 -r 6 --progress "
     )
 
     if best_2['override_tensor'] != "none":
         llama_bench_cmd += f' --override-tensor "{OVERRIDE_PATTERNS[best_2["override_tensor"]]}" ' # concatenate string if --override-tensor key is != "none" 
 
+
+    # 3. llama-bench (dry benchmark == default llama.cpp)
+    llama_bench_cmd_default = (
+        f"{llama_bench_path}"
+        f" --model {model_path}"    # path_to_model.gguf
+        f" -n 128 -p 256 -r 6 --progress "
+    )
+
+
+    print("########################################################")
+    print("# You can now benchmark your optimized configuration   #")
+    print('# Jus run the following line on terminal:              #')
+    print("########################################################")
     print("")
-    print("# To benchmark both generation and prompt processing speeds:")
     print(f"{llama_bench_cmd}")
     print("")
+
+    # launch optimized bench
+    subprocess.run(shlex.split(llama_bench_cmd), check=True)
+
+
+    print("")
+    print("########################################################")
+    print("# Compare you previous results with non-optimized case #")
+    print('# Just run the following line on terminal:             #')
+    print("########################################################")
+    print("")
+    print(f"{llama_bench_cmd_default}")
+    print("")
+
+    # launch optimized bench
+    subprocess.run(shlex.split(llama_bench_cmd_default), check=True)
+
+    # [TBD] add % of improvement 
 
 
