@@ -87,7 +87,7 @@ def run_llama_bench_with_csv(cmd, metric):
         if not tg_rows.empty: # write only if tg_row is not empty 
             metric_value = float(tg_rows["avg_ts"].iloc[0])
             std_value = float(tg_rows["stddev_ts"].iloc[0])
-            print(f"metric: {metric_value} tokens/s ; std {std_value}")  
+            print(f"Token generation speed: {metric_value:.3f} tokens/s ; std {std_value:.3f}")  
             print("")   
 
     elif metric == "pp":
@@ -95,15 +95,28 @@ def run_llama_bench_with_csv(cmd, metric):
         if not pp_rows.empty: # write only if pp_row is not empty 
             metric_value = float(pp_rows["avg_ts"].iloc[0])
             std_value = float(pp_rows["stddev_ts"].iloc[0]) 
-            print(f"metric: {metric_value} tokens/s ; std {std_value}") 
+            print(f"Prompt processing speed: {metric_value:.2f} tokens/s ; std {std_value:.2f}") 
             print("")
-            
+
     elif metric == "mean":
         tg_rows = df[df["n_gen"] > 0]
         pp_rows = df[df["n_prompt"] > 0]
-        if not tg_rows.empty and not pp_rows.empty: # write only if tg_ and pp_row are not empty 
-            metric_value = 0.5 * (float(tg_rows["avg_ts"].iloc[0]) + float(pp_rows["avg_ts"].iloc[0]))
-       
+        if not tg_rows.empty and not pp_rows.empty: # write only if tg_ and pp_row are not empty
+            tg_value = float(tg_rows["avg_ts"].iloc[0])
+            tg_std = float(tg_rows["stddev_ts"].iloc[0]) 
+
+            pp_value = float(pp_rows["avg_ts"].iloc[0]) 
+            pp_std = float(pp_rows["stddev_ts"].iloc[0]) 
+
+            metric_value = (tg_value + pp_value) * 1/2  # (tg + pp) mean value 
+            metric_std = ( pp_std**2 + tg_std**2 )**0.5 # sqrt of the squared sum of std values
+
+            print("")
+            print(f"Token generation  speed : {tg_value:.2f} tokens/s ; std {tg_std:.2f}")  
+            print(f"Prompt processing speed : {pp_value:.2f} tokens/s ; std {pp_std:.2f}")  
+            print(f"Mean values (tg+pp)/2: {metric_value:.2f} tokens/s; std {metric_std:.2f}")   
+            print("")
+
     return metric_value
 
 
