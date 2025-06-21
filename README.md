@@ -1,18 +1,14 @@
 # llama-optimus
 
-> **Running Local AI?**
->
-> **Optimize llama.cpp hyperparameters**
->
-> **Maximize your tokens/s for prompt processing (pp) & token generation (tg)**
->
-> llama-optimus is a lightweight Python tool to automatically optimize `llama.cpp` performance flags for maximum throughput.
->
-> Supports Apple Silicon, Linux, and NVIDIA GPUs.
->
-> **Brings Bayesian optimization (Optuna) to your local or embedded AI models.**
->
-> **Find the *BEST* performance flags for *YOUR* unique hardware in minutes.**
+**Running Local AI?**
+
+**llama-optimus will find the *BEST* llama.cpp performance flags for *YOUR* unique hardware**
+
+**llama-optimus** is a lightweight Python tool to automatically optimize `llama.cpp` performance flags for maximum throughput.
+
+Maximize your tokens/s for prompt processing (pp) & token generation (tg).
+
+Brings Bayesian optimization (Optuna) to your local & embedded AI models.
 
 ---
 
@@ -28,12 +24,13 @@
 - **Bayesian optimization** (Optuna) is used to maximize tokens/sec for prompt processing, generation or both
 - **Estimates user-specified GPU layer count (`-ngl`).**
 - **Supports override patterns for --override-tensor**: allows you to optimize advanced memory offloading for large models or low VRAM systems.
-- **Automatic system warmup detection** to ensure benchmarking is done under real-world, “steady-state” conditions.
+- **Built in system warmup** to ensure benchmarking is done under real-world, “steady-state” conditions.
 - **Grid search over categorical parameters** (for flags like --override-tensor and --flash-attn ) combined with Bayesian tuning of numerical ones.
 - **CLI interface:** All major parameters and paths are settable via command line or environment variable.
 - **Built on:** [Optuna](https://optuna.org/) for hyperparameter optimization and [llama.cpp](https://github.com/ggerganov/llama.cpp) for inference.
 - Adapts to Apple Silicon, Linux x86, and NVIDIA GPU systems
 - Outputs copy-paste-ready commands for `llama-server` and `llama-bench`
+- Automatically runs `llama-bench` (at the end) comparing *optimized* vs. *non-optimized* results.  
 - **Quick & robust benchmarks:** Controllable via `-repeat` and `--n-tokens` flags which set the number of llama-bench repetitions per trial, and the number of tokens used when estimating tokens/s velocity in prompt processing (pp) and text generation (tg). 
 
 ---
@@ -50,7 +47,28 @@
 
 ---
 
-## Installation
+## Installation I (recommended)
+
+1. **Install llama-optimus from Pypi distribution**
+    ```bash
+    pip install llama-optimus
+    ````
+
+2. **Launch llama-optimus**
+    ```bash
+    llama-optimus
+    ```
+
+3. **Provide paths to `llama.cpp/build/bin` and `model.gguf`** 
+    During launch, you will be propted to provide the path to your ~/llama.cpp/build/bin directory, and also the path to your AI model ~/model.gguf. **Note:** You must have the latest version of llama.cpp (Follow the [llama.cpp instructions](https://github.com/ggerganov/llama.cpp#build).)
+ 
+4. **For a quick test** lauch with no warmup flag, and with few token per trail loop 
+    ```bash
+    llama-optimus --trials 5 --repeat 2 --no-warmup --n-tokens 20 --metric tg    
+    ```
+
+
+## Intallation II (dev option)
 
 1. **Clone this repo:**
     ```bash
@@ -85,19 +103,18 @@
 - All arguments are optional except `--llama-bin` and `--model` (if not set as env variables).
 - CLI flags **override environment variables**.
 
-### Option A: **Set as environment variables**
+### Option A: **Set paths as environment variables**
 ```bash
 export LLAMA_BIN=/path_to/llama.cpp/build/bin
 export MODEL_PATH=/path_to/model.gguf
-python src/optimus.py
 ```
 
-then you only need:
+if you set those environment variables, you will not need to pass the llama bin and model paths. 
 ```bash
 llama-optimus
 ```
 
-for a robust test, you can use more trials (default: 45), and more benchmark repetitions (default: 2)
+for a robust test, you can use more trials (default: 45), and more benchmark repetitions (default: 3)
 ```bash
 llama-optimus --trials 70 -r 5 
 ```
