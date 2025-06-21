@@ -44,7 +44,7 @@ def estimate_max_ngl(llama_bench_path, model_path, min_ngl=0, max_ngl=SEARCH_SPA
             "-o", "csv"
         ]
         try:
-            subprocess.run(cmd, capture_output=True, text=True, timeout=420, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, timeout=620, check=True)
             low = mid  # success → try higher
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             high = mid - 1  # failure → reduce range
@@ -67,7 +67,7 @@ def run_llama_bench_with_csv(cmd, metric):
         float: The value of the selected metric, or 0.0 if it cannot be extracted.
     """    
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=420)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=820)
     if result.returncode != 0:
         raise RuntimeError(result.stderr)
     
@@ -86,15 +86,24 @@ def run_llama_bench_with_csv(cmd, metric):
         tg_rows = df[df["n_gen"] > 0]
         if not tg_rows.empty: # write only if tg_row is not empty 
             metric_value = float(tg_rows["avg_ts"].iloc[0])
+            std_value = float(tg_rows["stddev_ts"].iloc[0])
+            print(f"metric: {metric_value} tokens/s ; std {std_value}")  
+            print("")   
+
     elif metric == "pp":
         pp_rows = df[df["n_prompt"] > 0]
         if not pp_rows.empty: # write only if pp_row is not empty 
             metric_value = float(pp_rows["avg_ts"].iloc[0])
+            std_value = float(pp_rows["stddev_ts"].iloc[0]) 
+            print(f"metric: {metric_value} tokens/s ; std {std_value}") 
+            print("")
+            
     elif metric == "mean":
         tg_rows = df[df["n_gen"] > 0]
         pp_rows = df[df["n_prompt"] > 0]
         if not tg_rows.empty and not pp_rows.empty: # write only if tg_ and pp_row are not empty 
             metric_value = 0.5 * (float(tg_rows["avg_ts"].iloc[0]) + float(pp_rows["avg_ts"].iloc[0]))
+       
     return metric_value
 
 

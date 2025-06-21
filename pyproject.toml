@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "llama-optimus"
 version = "0.1.7"
-description = "Automatic optimization of llama.cpp inference flags using Bayesian optimization (Optuna)"
+description = "llama-optimus is a lightweight Python tool to automatically optimize llama.cpp performance flags for maximum tg & pp token/s throughput. Powered by Bayesian optimization with Optuna"
 authors = [
   { name = "Bruno Arsioli", email = "YOUR_EMAIL@yourdomain.com" }
 ]
