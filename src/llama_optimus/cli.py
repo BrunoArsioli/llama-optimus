@@ -2,6 +2,8 @@
 # handle parsing, validation, and env setup
 
 import argparse, os, sys
+import platform 
+from pathlib import Path   
 from .core import run_optimization, estimate_max_ngl, warmup_until_stable
 from .override_patterns import OVERRIDE_PATTERNS   
 from .search_space import SEARCH_SPACE, max_threads 
@@ -68,8 +70,18 @@ def main():
     llama_bin_path = (args.llama_bin or os.environ.get("LLAMA_BIN")
         or input("Please, provide the path to your 'llama.cpp/build/bin' ").strip() )
 
-    # Build llama_bench_path
-    llama_bench_path = f"{llama_bin_path}/llama-bench"
+    # Check the operating system and build llama_bench_path
+    if platform.system() == "Windows":
+        llama_bench_path = f"{llama_bin_path}/Release/llama-bench.exe"
+        # Sanity-check
+        if not Path(llama_bench_path).is_file():
+            sys.exit(f"ERROR: llama-bench.exe not found at {llama_bench_path}.")
+    else:
+        llama_bench_path = f"{llama_bin_path}/llama-bench"
+        # Sanity-check
+        if not Path(llama_bench_path).is_file():
+            sys.exit(f"ERROR: llama-bench not found at {llama_bench_path}.")
+
 
     # Resolve model_path
     model_path = (args.model or os.environ.get("MODEL_PATH")
