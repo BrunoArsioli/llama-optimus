@@ -75,12 +75,12 @@ def main():
         llama_bench_path = f"{llama_bin_path}/Release/llama-bench.exe"
         # Sanity-check
         if not Path(llama_bench_path).is_file():
-            sys.exit(f"ERROR: llama-bench.exe not found at {llama_bench_path}.")
+            sys.exit(f"ERROR: llama-bench.exe not found at {llama_bench_path}")
     else:
         llama_bench_path = f"{llama_bin_path}/llama-bench"
         # Sanity-check
         if not Path(llama_bench_path).is_file():
-            sys.exit(f"ERROR: llama-bench not found at {llama_bench_path}.")
+            sys.exit(f"ERROR: llama-bench not found at {llama_bench_path}")
 
 
     # Resolve model_path
