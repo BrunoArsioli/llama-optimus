@@ -8,10 +8,36 @@ import shutil
 import pandas as pd 
 import tempfile
 import subprocess
+import shlex
 from optuna.samplers import TPESampler
 from optuna.samplers import GridSampler
 from .override_patterns import OVERRIDE_PATTERNS   
 from .search_space import SEARCH_SPACE, max_threads 
+
+
+def _quote_path(path):
+    """Quote a single filesystem path for display, so it can be pasted into a
+    terminal on the current platform (handles spaces and special characters)."""
+    if os.name == "nt":
+        # cmd / PowerShell: double quotes preserve spaces and backslashes
+        return f'"{path}"'
+    return shlex.quote(path)
+
+
+def _format_cmd(cmd):
+    """Format a command argument list as a display string, quoted for the
+    current platform's shell.
+
+    Display only: commands are executed from the list form via subprocess.run()
+    without a shell, so arguments are never re-interpreted by a shell.
+    """
+    cmd = [str(arg) for arg in cmd]
+    if os.name == "nt":
+        # Same quoting rules subprocess itself uses when launching on Windows
+        # (quotes args with spaces; keeps backslashes intact)
+        return subprocess.list2cmdline(cmd)
+    return shlex.join(cmd)
+
 
 def estimate_max_ngl(llama_bench_path, model_path, min_ngl=0, max_ngl=SEARCH_SPACE['gpu_layers']['high']):
     """
@@ -468,11 +494,20 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print("")
 
     # 1. llama-server (inference); will be listening at http://127.0.0.1:8080/ in your browser. 
+    # Display-only command (never executed by Python): it references env vars the user 
+    # exports, so no real paths are embedded in this string.
+    if os.name == "nt":
+        env_bin, env_model = "%LLAMA_BIN%", "%MODEL%"
+        llama_server_path = f"{env_bin}\\llama-server"
+    else:
+        env_bin, env_model = "$LLAMA_BIN", "$MODEL"
+        llama_server_path = f"{env_bin}/llama-server"
+
     llama_server_cmd = (
         #f"{llama_bin_path}/llama-server" 
         #f" --model {model_path}"   # path_to_model.gguf 
-        f" $LLAMA_BIN/llama-server"
-        f" --model $MODEL"
+        f'"{llama_server_path}"'
+        f' --model "{env_model}"'   # quoted: survives expansion if path has spaces
         f" -t {best_3['threads']}"
         f" --batch-size {best_3['batch']}"
         f" --ubatch-size {best_3['u_batch']}"
@@ -481,11 +516,11 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     )
 
     if best_2['override_tensor'] != "none":
-        llama_server_cmd += f'  --override-tensor "{OVERRIDE_PATTERNS[best_2["override_tensor"]]}" '  # only add if --override-tensor key is != "none" 
+        llama_server_cmd += f' --override-tensor "{OVERRIDE_PATTERNS[best_2["override_tensor"]]}"'  # only add if --override-tensor key is != "none" 
 
     # for llama-server, --flash-att is of 'action' type (i.e. do not accept <0|1> values).
     if best_2['flash_attn'] == 1:
-        llama_server_cmd += f" --flash-attn "    
+        llama_server_cmd += " --flash-attn"    
 
     print("")
     print("###################################################################")
@@ -493,36 +528,43 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print("# just run next lines in your terminal:                           #")
     print("###################################################################")
     print("")
-    print(f"LLAMA_BIN={llama_bin_path}")
-    print(f"MODEL={model_path}")
+    if os.name == "nt":
+        print(f'set "LLAMA_BIN={llama_bin_path}"')
+        print(f'set "MODEL={model_path}"')
+    else:
+        print(f"export LLAMA_BIN={_quote_path(llama_bin_path)}")
+        print(f"export MODEL={_quote_path(model_path)}")
     print("")
-    print(f"{llama_server_cmd}")
+    print(llama_server_cmd)
     print("")
 
 
     # 2. llama-bench (benchmark for both tg and pp)
-    llama_bench_cmd = (
-        f"{llama_bench_path}"
-        f" --model {model_path}"    # path_to_model.gguf
-        f" -t {best_3['threads']}"
-        f" --batch-size {best_3['batch']}"
-        f" --ubatch-size {best_3['u_batch']}"
-        f" -ngl {best_3['gpu_layers']}"
-        f" --flash-attn {best_2['flash_attn']}"  # in llama-server, --flash-attn is type 'int', accepts <0|1> values.
-        #f" --override-tensor {OVERRIDE_PATTERNS[best_2['override_tensor']]}"
-        f" -n 128 -p 256 -r 6 --no-warmup --progress "
-    )
+    # Build as an argument LIST and run it without a shell: each argument is passed 
+    # to the binary verbatim, so spaces, backslashes and shell metacharacters in 
+    # paths (and in --override-tensor regexes) are never interpreted, and command 
+    # injection is impossible. This works on Windows and POSIX alike.
+    llama_bench_cmd = [
+        llama_bench_path,                          # path to your llama-bench binary
+        "--model", model_path,                     # path_to_model.gguf
+        "-t", str(best_3['threads']),
+        "--batch-size", str(best_3['batch']),
+        "--ubatch-size", str(best_3['u_batch']),
+        "-ngl", str(best_3['gpu_layers']),
+        "--flash-attn", str(best_2['flash_attn']),  # llama-bench accepts --flash-attn <0|1>
+        "-n", "128", "-p", "256", "-r", "6", "--no-warmup", "--progress",
+    ]
 
     if best_2['override_tensor'] != "none":
-        llama_bench_cmd += f' --override-tensor "{OVERRIDE_PATTERNS[best_2["override_tensor"]]}" ' # concatenate string if --override-tensor key is != "none" 
+        llama_bench_cmd += ["--override-tensor", OVERRIDE_PATTERNS[best_2["override_tensor"]]]  # concatenate list if --override-tensor key is != "none"
 
 
     # 3. llama-bench (dry benchmark == default llama.cpp)
-    llama_bench_cmd_default = (
-        f"{llama_bench_path}"
-        f" --model {model_path}"    # path_to_model.gguf
-        f" -n 128 -p 256 -r 6 --no-warmup --progress " # internal llama-bench --no-warmup; unrelated to llama-optimus warm-up flag
-    )
+    llama_bench_cmd_default = [
+        llama_bench_path,
+        "--model", model_path,    # path_to_model.gguf
+        "-n", "128", "-p", "256", "-r", "6", "--no-warmup", "--progress",  # internal llama-bench --no-warmup; unrelated to llama-optimus warm-up flag
+    ]
 
 
     print("########################################################")
@@ -530,13 +572,11 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print("# Let's run the following line on terminal:            #")
     print("########################################################")
     print("")
-    print(f"{llama_bench_cmd}")
+    print(_format_cmd(llama_bench_cmd))
     print("")
 
-    # launch optimized bench
-    # Use shell=True instead of shlex.split() because shlex interprets
-    # backslashes as escape characters, breaking Windows paths.
-    subprocess.run(llama_bench_cmd, check=True, shell=True)
+    # launch optimized bench (list form, no shell)
+    subprocess.run(llama_bench_cmd, check=True)
 
 
     print("")
@@ -549,11 +589,11 @@ def run_optimization(n_trials, n_tokens, metric, repeat, llama_bench_path, model
     print("# row pp256 --> reports on prompt processing speed     #")
     print("########################################################")
     print("")
-    print(f"{llama_bench_cmd_default}")
+    print(_format_cmd(llama_bench_cmd_default))
     print("")
 
-    # launch non-optimized (default) bench
-    subprocess.run(llama_bench_cmd_default, check=True, shell=True)
+    # launch non-optimized (default) bench (list form, no shell)
+    subprocess.run(llama_bench_cmd_default, check=True)
 
     # [TBD] add % of improvement 
 
